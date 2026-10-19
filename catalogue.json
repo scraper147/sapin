@@ -7,22 +7,22 @@
   "pointsDeVente": [
     {
       "id": "pdv1",
-      "nom": "Point de vente 1",
+      "nom": "Spy",
       "actif": true
     },
     {
       "id": "pdv2",
-      "nom": "Point de vente 2",
+      "nom": "Eghezee",
       "actif": true
     },
     {
       "id": "pdv3",
-      "nom": "Point de vente 3",
+      "nom": "Meux",
       "actif": true
     },
     {
       "id": "pdv4",
-      "nom": "Point de vente 4",
+      "nom": "Boninne",
       "actif": true
     }
   ],
