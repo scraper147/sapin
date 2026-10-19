@@ -4,7 +4,7 @@
 // Préfixe propre à CETTE caisse : plusieurs caisses partagent l'adresse <compte>.github.io,
 // il ne faut jamais toucher aux caches des autres.
 var PREFIX = 'caisse-agri-garden-';
-var CACHE = PREFIX + 'v8';
+var CACHE = PREFIX + 'v9';
 var FILES = ['./', './index.html', './manifest.webmanifest', './catalogue.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
@@ -24,9 +24,10 @@ self.addEventListener('fetch', function (e) {
     var done = false;
     function fromCache() {
       if (done) return; done = true;
-      caches.match(e.request, { ignoreSearch: true }).then(function (r) {
-        resolve(r || caches.match('./index.html'));
-      });
+      // On ne cherche que dans le cache de cette caisse
+      caches.open(CACHE).then(function (c) {
+        return c.match(e.request, { ignoreSearch: true }).then(function (r) { return r || c.match('./index.html'); });
+      }).then(resolve);
     }
     var timer = setTimeout(fromCache, 3000); // réseau trop lent : on n'attend pas
     fetch(e.request).then(function (res) {
