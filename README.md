@@ -39,6 +39,7 @@ La caisse sapins n'ajoute pas d'articles depuis l'app (`OPTIONS.ajoutArticles = 
 
 ## Modifier catalogue.json à la main
 
+- **Vérifier le catalogue à la demande** : **⋮ → Vérifier le catalogue** (la tuile indique la version installée, ou « Mise à jour disponible » si la caisse en a déjà repéré une). Si le `catalogue.json` en ligne est différent, la fenêtre « Nouveau catalogue disponible » s'ouvre (**Installer** ou **Plus tard** ; le panier en cours est vidé à l'installation). Sinon : « Le catalogue est à jour », ou « Pas de réseau ». La caisse vérifie aussi seule à chaque ouverture, mais pendant le service elle ne propose l'installation que sur demande.
 - L'ordre d'affichage suit l'attribut `ordre` : celui des catégories pour les onglets, celui des articles dans chaque catégorie (du plus petit au plus grand).
 - Après avoir déposé le fichier, chaque caisse ouverte avec du réseau propose « Nouveau catalogue disponible » → **Installer**, même si le numéro de `version` n'a pas changé (la caisse compare aussi le contenu). Augmenter la `version` reste conseillé, pour savoir quelle version est installée sur chaque appareil.
 
@@ -81,7 +82,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**).
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (`var CACHE = PREFIX + 'v9';` → `'v10'`…), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (`var CACHE = PREFIX + 'v10';` → `'v11'`…), sans changer le préfixe.
 
 ## Mettre à jour les prix ou les produits
 
@@ -105,7 +106,7 @@ Le bouton **Paramètres de la tablette → Vérifier les mises à jour** force l
 
 ## Cohabitation avec la Caisse Bar (même compte GitHub)
 
-La caisse sapins (`/sapin/`) et la Caisse Bar (`/bar/`) partagent l'adresse `scraper147.github.io`, donc la même mémoire navigateur et le même espace de caches. Caisse sapins : clés `agrigarden-caisse` et `agrigarden-caisse-catalogue`, cache `caisse-agri-garden-v9`, icône « Caisse Sapins ». Chaque caisse doit avoir :
+La caisse sapins (`/sapin/`) et la Caisse Bar (`/bar/`) partagent l'adresse `scraper147.github.io`, donc la même mémoire navigateur et le même espace de caches. Caisse sapins : clés `agrigarden-caisse` et `agrigarden-caisse-catalogue`, cache `caisse-agri-garden-v10`, icône « Caisse Sapins ». Chaque caisse doit avoir :
 - ses propres clés de stockage (`STORE_KEY`, `CAT_KEY` dans `index.html`) ;
 - son propre préfixe de cache (`PREFIX` dans `sw.js`) : une mise à jour ne supprime que les anciens caches de son préfixe ;
 - son propre `short_name` dans `manifest.webmanifest`, pour ne pas confondre les icônes.
