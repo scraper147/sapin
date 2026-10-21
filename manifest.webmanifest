@@ -4,7 +4,7 @@
   "short_name": "Caisse Sapins",
   "description": "Caisse de vente de sapins Agri-Garden, fonctionne hors ligne.",
   "lang": "fr",
-  "start_url": "/sapin/",
+  "start_url": "/sapin/index.html",
   "scope": "/sapin/",
   "display": "fullscreen",
   "orientation": "any",
