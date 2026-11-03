@@ -48,7 +48,7 @@ Le catalogue (points de vente, catégories, articles, prix) est **géré et publ
 
 ## Articles du catalogue
 
-La caisse sapins n'ajoute pas d'articles depuis l'app (`OPTIONS.ajoutArticles = false`) : les articles viennent uniquement du catalogue publié par l'app Admin. Sur chaque appareil, on peut seulement désactiver des articles ou changer un prix (voir plus bas).
+La caisse sapins n'ajoute pas d'articles depuis l'app (`OPTIONS.ajoutArticles = false`) : les articles viennent uniquement du catalogue publié par l'app Admin. Le menu « Gérer le catalogue » est retiré (`GESTION_CATALOGUE = false` en haut du script) : pas de désactivation d'article ni de prix modifié sur une tablette, les réglages faits auparavant sur un appareil sont ignorés. Pour retirer un article ou changer un prix : app Admin, puis publier le catalogue.
 
 ## Envoi des ventes sur GitHub (automatique)
 
@@ -77,13 +77,6 @@ Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précé
 - Si l'envoi automatique est actif, le jour est renvoyé tout seul. Sinon, si le jour avait déjà été exporté, il faut le télécharger à nouveau (l'app le signale).
 - Une annulation ne peut pas être défaite. Le remboursement éventuel (cash ou terminal Bancontact) se fait à part.
 
-## Activer / désactiver des articles, changer un prix
-
-Menu **⋮ → Gérer le catalogue (activer / désactiver)** : liste de tous les articles par catégorie, avec un interrupteur par article et un « Tout activer / Tout désactiver » par catégorie.
-- Un article désactivé n'apparaît plus dans la caisse ; une catégorie sans article actif est masquée.
-- Le réglage est propre à chaque appareil et reste valable après les mises à jour du catalogue. Le catalogue lui-même n'est pas modifié.
-- **Changer un prix** : toucher le prix de l'article, saisir le nouveau prix, **Enregistrer**. Le prix d'origine reste affiché (« catalogue : … ») et le bouton **Revenir au prix du catalogue** annule la modification. Le nouveau prix vaut pour les prochaines ventes de cet appareil ; les ventes déjà faites ne changent pas. Pour changer un prix sur toutes les tablettes : app Admin.
-
 ## Tablette ou smartphone
 
 L'app choisit seule sa présentation au démarrage, selon la taille de l'écran :
@@ -96,7 +89,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v11';` → `'v12'`…), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v12';` → `'v13'`…), sans changer le préfixe.
 
 ## Bonnes pratiques
 
