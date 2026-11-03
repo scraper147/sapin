@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -172,6 +172,8 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .framed body{display:flex;align-items:center;justify-content:center;background:#C9CCC4}
 .framed[data-theme="dark"] body{background:#050705}
 .framed #app{width:390px;height:min(844px,calc(100% - 32px));border-radius:36px;border:10px solid #111;box-shadow:0 20px 60px rgba(0,0,0,.35);background:var(--ground)}
+.autobar{border:1px solid var(--line2);background:var(--surface);border-radius:12px;padding:10px 16px;font-size:15px;font-weight:700;max-width:min(560px,92%);text-align:center}
+.phone .subbar .place span{line-height:1.25}
 .memwarn{display:block;width:100%;flex-shrink:0;border:none;background:var(--warn-bg);color:var(--warn-text);font-size:15px;font-weight:700;padding:10px 16px;text-align:center}
 .center .memwarn{width:auto;max-width:min(560px,92%);border-radius:12px}
 .memgauge{display:flex;flex-direction:column;gap:6px;font-size:15px}
@@ -434,10 +436,12 @@ var STORAGE_LIMIT = 5000000;
 function storageUsed() { var n = 0; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); n += k.length + (localStorage.getItem(k) || '').length; } } catch (e) {} return n; }
 function storageMo(n) { return (n / 1000000).toFixed(1).replace('.', ',') + ' Mo'; }
 function refreshUsage() { S.usedPct = Math.round(storageUsed() * 100 / STORAGE_LIMIT); }
-function persist() {
+function persist(noSync) {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({ placeId: S.placeId, days: S.days, openedDate: S.openedDate, exported: S.exported }));
-    refreshUsage(); return true;
+    refreshUsage();
+    if (!noSync && typeof autoSchedule === 'function') autoSchedule(AUTO_DELAI); // modification : envoi automatique un peu plus tard
+    return true;
   } catch (e) { S.modal = 'storage'; S.menu = false; refreshUsage(); return false; }
 }
 
@@ -470,10 +474,10 @@ function dayFile(date) {
   };
 }
 
-/* ---------- Envoi des ventes sur GitHub (uniquement à la demande) ----------
+/* ---------- Envoi des ventes sur GitHub (automatique dès qu'il y a internet, ou à la demande) ----------
    Dépôt privé dédié aux ventes. Le jeton GitHub des caisses (fine-grained, limité à ce dépôt, Contents : Read and write)
    est intégré CHIFFRÉ (AES-GCM 256, clé dérivée de la phrase de passe par PBKDF2-SHA256, même format que l'app admin).
-   Chaque appareil le déverrouille une fois avec la phrase de passe. Rien n'est envoyé sans un appui sur « Envoyer ».
+   Chaque appareil le déverrouille une fois avec la phrase de passe. Ensuite, chaque jour modifié depuis son dernier envoi part tout seul (voir « Envoi automatique »).
    Clé à préparer avec l'app admin (Paramètres > Préparer la clé chiffrée) : jeton des CAISSES + phrase des CAISSES. */
 /* ---------- Options de cette caisse ---------- */
 var OPTIONS = {
@@ -482,7 +486,7 @@ var OPTIONS = {
 
 var GH_REPO = 'scraper147/ventes';          // ex. 'scraper147/ventes' (dépôt privé dédié aux ventes) ; vide = fonction masquée
 var GH_DOSSIER = 'sapin';  // dossier de cette caisse dans le dépôt des ventes (ex. 'bar', 'sapin')
-var CLE_CHIFFREE = {"v":1,"kdf":"PBKDF2-SHA256","iter":600000,"salt":"5IZtB3dQO9ai0MwpOlomjg==","iv":"86amDE8FvOCiCDGl","data":"wOVUYuUolCQQadXsUb0ROhr0jWbh4xUYwGzesbv/g+vYObhfjXzhgVcZagBTguF0pvFyOU+HmRJZdfwh2Iz6obVMBltBCbmY7uh2G+TLtgbnHsfdtD/X2bXPdRnYoP1uJwnCOwc0nXpq8TIEmw=="};   // clé chiffrée des caisses (app admin > Préparer la clé chiffrée) ; null = fonction masquée
+var CLE_CHIFFREE = {"v":1,"kdf":"PBKDF2-SHA256","iter":600000,"salt":"kHwfHCML8CWZygnhH3r6dA==","iv":"1ZjD1BOwURkTUN0z","data":"oDMdS12pYygGPYMQtE0wEiVSMibJrGnCF7XAjbWdKaVVQG8hPEDh6x6QfYf0QpXh5jZbxJrIwTXDtb78J4biUSrQBUnH1RgaXI+lc6ZMBX4vgpr83ZYYCwEDEOWbVNoSJeK7afjX7DcV8eTUDg=="};   // clé chiffrée des caisses (app admin > Préparer la clé chiffrée) ; null = fonction masquée
 var GH_KEY = STORE_KEY + '-github';
 var GH = {};
 try { GH = JSON.parse(localStorage.getItem(GH_KEY)) || {}; } catch (e) { GH = {}; }
@@ -518,29 +522,84 @@ function ghPath(date) {
   var pl = placeOf(date) || {};
   return GH_DOSSIER + '/' + date + '_' + (slug(pl.id || 'pdv').slice(0, 12) || 'pdv') + '_' + (slug(pl.nom || 'bar').slice(0, 24) || 'bar') + '_' + GH.appareil + '.json';
 }
+/* Empreinte du contenu d'un jour : si elle change depuis le dernier envoi, le jour est à renvoyer */
+function daySig(date) { var l = salesOf(date), pl = placeOf(date) || {}; return l.length + '|' + l.filter(function (v) { return v.annulation; }).length + '|' + (pl.id || '') + '|' + (pl.nom || ''); }
+function ghUrl(path) { return '/repos/' + GH_REPO + '/contents/' + path.split('/').map(encodeURIComponent).join('/'); }
+/* Envoi d'un jour (remplace le fichier de cette tablette). Lance une exception (code HTTP, ou 0 sans réseau) en cas d'échec. */
+async function ghPut(date, auto) {
+  var sig = daySig(date), path = ghPath(date), url = ghUrl(path), pl = placeOf(date);
+  var body = { message: (auto ? 'Envoi automatique · ' : '') + 'Ventes du ' + date.split('-').reverse().join('/') + ', ' + (pl ? pl.nom : '') + ' (appareil ' + GH.appareil + ')',
+               content: b64utf8(JSON.stringify(dayFile(date), null, 2)) };
+  var old = GH.chemins && GH.chemins[date]; // ancien nom de fichier (point de vente changé) : supprimé pour ne pas compter deux fois
+  for (var essai = 0; essai < 2; essai++) {
+    var g = await ghApi('GET', url, GH.token);
+    if (g.ok) body.sha = (await g.json()).sha; else if (g.status === 404) delete body.sha; else throw g.status;
+    var r = await ghApi('PUT', url, GH.token, body);
+    if (r.ok) break;
+    if ((r.status === 409 || r.status === 422) && essai === 0) continue; // fichier modifié entre-temps : on relit et on réessaie
+    throw r.status;
+  }
+  if (old && old !== path) {
+    try { var go = await ghApi('GET', ghUrl(old), GH.token); if (go.ok) await ghApi('DELETE', ghUrl(old), GH.token, { message: 'Changement de point de vente, appareil ' + GH.appareil, sha: (await go.json()).sha }); } catch (e) {}
+  }
+  GH.envois[date] = isoLocal(new Date()); GH.chemins = GH.chemins || {}; GH.chemins[date] = path;
+  GH.sig = GH.sig || {}; GH.sig[date] = sig; saveGh();
+  S.exported[date] = true; persist(true);
+  return path;
+}
 async function ghSend(date) {
   if (S.ghBusy || !ghReady()) return;
   S.ghBusy = date; S.menu = false; render();
-  var path = ghPath(date), url = '/repos/' + GH_REPO + '/contents/' + path.split('/').map(encodeURIComponent).join('/');
-  var pl = placeOf(date);
-  var body = { message: 'Ventes du ' + date.split('-').reverse().join('/') + ', ' + (pl ? pl.nom : '') + ' (appareil ' + GH.appareil + ')',
-               content: b64utf8(JSON.stringify(dayFile(date), null, 2)) };
   try {
-    for (var essai = 0; essai < 2; essai++) {
-      var g = await ghApi('GET', url, GH.token);
-      if (g.ok) body.sha = (await g.json()).sha; else if (g.status === 404) delete body.sha; else throw g.status;
-      var r = await ghApi('PUT', url, GH.token, body);
-      if (r.ok) break;
-      if ((r.status === 409 || r.status === 422) && essai === 0) continue; // fichier modifié entre-temps : on relit et on réessaie
-      throw r.status;
-    }
-    GH.envois[date] = isoLocal(new Date()); saveGh();
-    S.exported[date] = true; persist();
+    var path = await ghPut(date, false);
+    AUTO.err = null; AUTO.last = Date.now();
     toast('Envoyé sur GitHub à ' + GH.envois[date].slice(11, 16) + ' : ' + path);
   } catch (e) {
+    if (e === 401) { delete GH.token; saveGh(); } // jeton refusé : il faudra déverrouiller à nouveau
     S.ghResult = { text: ghError(typeof e === 'number' ? e : 0) }; S.modal = 'ghres';
   } finally { S.ghBusy = null; render(); }
 }
+
+/* ---------- Envoi automatique ----------
+   Dès que la tablette a internet (et que l'envoi est déverrouillé), chaque jour modifié depuis son dernier envoi
+   est envoyé, sans action ni message. Après une vente ou une annulation : envoi ~15 s plus tard, au plus une fois par minute.
+   Vérification aussi au démarrage, au retour du réseau, au retour de l'app au premier plan et toutes les minutes. */
+var AUTO_DELAI = 15000, AUTO_MIN_INTERVALLE = 60000;
+var AUTO = { timer: null, last: 0, err: null };
+function daysToSend() {
+  GH.sig = GH.sig || {};
+  return Object.keys(S.days).filter(function (d) { return S.days[d] && S.days[d].length && GH.sig[d] !== daySig(d); }).sort();
+}
+function autoSchedule(delay) { if (!ghConfigured()) return; clearTimeout(AUTO.timer); AUTO.timer = setTimeout(autoSync, delay); }
+async function autoSync() {
+  if (!ghReady() || S.ghBusy || navigator.onLine === false) return;
+  var todo = daysToSend(); if (!todo.length) return;
+  var wait = AUTO.last + AUTO_MIN_INTERVALLE - Date.now();
+  if (wait > 0 && !AUTO.err) { autoSchedule(wait); return; }
+  S.ghBusy = 'auto'; render();
+  try { for (var i = 0; i < todo.length; i++) await ghPut(todo[i], true); AUTO.err = null; }
+  catch (e) { if (e === 401) { delete GH.token; saveGh(); } AUTO.err = typeof e === 'number' ? e : 0; }
+  finally { AUTO.last = Date.now(); S.ghBusy = null; render(); }
+}
+/* État de l'envoi automatique, pour le bandeau de l'accueil (t) et la mention de l'en-tête (court) */
+function autoStatus() {
+  if (!ghConfigured()) return null;
+  if (!ghReady()) return { ko: true, court: 'Envoi auto inactif', t: 'Envoi automatique inactif : touchez pour déverrouiller GitHub' };
+  if (S.ghBusy === 'auto') return { court: 'Envoi…', t: 'Envoi automatique en cours…' };
+  var n = daysToSend().length, last = Object.keys(GH.envois).map(function (k) { return GH.envois[k]; }).sort().pop();
+  if (n) {
+    if (navigator.onLine === false) return { warn: true, court: 'En attente de réseau', t: 'Pas de réseau : ' + n + ' jour' + (n > 1 ? 's' : '') + ' à envoyer dès le retour d\u2019internet' };
+    if (AUTO.err === 401) return { ko: true, court: 'Envoi auto inactif', t: 'GitHub refuse le jeton : touchez pour déverrouiller à nouveau' };
+    if (AUTO.err != null) return { warn: true, court: 'Nouvel essai bientôt', t: 'Dernier envoi automatique échoué (' + ghError(AUTO.err) + ') : nouvel essai automatique' };
+    return { court: 'Envoi prévu', t: 'Envoi automatique dans quelques instants' };
+  }
+  return { ok: true, court: last ? 'À jour ' + last.slice(11, 16) : 'À jour', t: last ? 'Envoi automatique : à jour (dernier envoi le ' + frDate(last).slice(0, 5) + ' à ' + last.slice(11, 16) + ')' : 'Envoi automatique actif : rien à envoyer' };
+}
+window.addEventListener('online', function () { autoSchedule(2000); render(); });
+window.addEventListener('offline', function () { render(); });
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') autoSchedule(3000); });
+setInterval(function () { autoSync(); }, 60000);
+
 async function ghUnlock() {
   if (!CLE_CHIFFREE) { S.ghMsg = { ok: false, text: 'La clé chiffrée n\u2019est pas encore installée dans cette version de la caisse.' }; render(); return; }
   if (!normPass(S.ghPass)) { S.ghMsg = { ok: false, text: 'Saisissez la phrase de passe.' }; render(); return; }
@@ -551,6 +610,7 @@ async function ghUnlock() {
   GH.token = token; saveGh(); S.ghPass = '';
   S.ghMsg = { ok: true, text: 'Déverrouillé sur cet appareil. Vérification de l\u2019accès au dépôt…' }; render();
   await ghTest();
+  AUTO.err = null; autoSchedule(1000);
   if (S.ghPending && S.ghMsg && S.ghMsg.ok) { var d = S.ghPending; S.ghPending = null; S.modal = S.ghBack || null; S.ghBack = null; ghSend(d); }
 }
 async function ghTest() {
@@ -581,7 +641,7 @@ var A = {
   toggleMenu: function () { S.menu = !S.menu; },
   openCart: function () { S.cartOpen = true; S.menu = false; },
   closeCart: function () { S.cartOpen = false; },
-  toggleTheme: function () { var t = isDark() ? 'dark' : 'light'; applyTheme(t); try { localStorage.setItem(THEME_KEY, t); } catch (e) {} },
+  toggleTheme: function () { var t = isDark() ? 'light' : 'dark'; applyTheme(t); try { localStorage.setItem(THEME_KEY, t); } catch (e) {} },
   cat: function (id) { S.cat = id; },
   add: function (pid) {
     var c, it;
@@ -759,12 +819,13 @@ function vHome() {
     '<img src="' + LOGO_FULL + '" alt="Agri-Garden by Xavier Vaerman" style="width:min(420px,60vw)">' +
     (!CATALOGUE
       ? '<button class="btn btn-primary btn-big" data-a="goSetup">Configurer la tablette</button>' +
-        '<div class="sub">' + (S.catLoading ? 'Chargement du catalogue…' : 'Catalogue introuvable : connectez la tablette à internet et rouvrez l\u2019app.') + '</div>'
+        '<div class="sub">' + (S.catLoading ? 'Chargement du catalogue…' : 'Catalogue introuvable : connectez la tablette à internet et rouvrez l\u2019app. Le fichier catalogue.json doit avoir été publié par l\u2019app Admin.') + '</div>'
       : p
       ? '<button class="btn btn-primary btn-big" data-a="openPos">' + (opened ? 'Reprendre la caisse' : 'Ouvrir la caisse') + '</button>' +
         '<div style="font-size:18px;font-weight:700">' + esc(p.nom) + '</div>'
       : '<button class="btn btn-primary btn-big" data-a="goSetup">Configurer la tablette</button>' +
         '<div class="sub">Première utilisation : assignez cette tablette à son point de vente.</div>') +
+    (CATALOGUE ? vAutoBar() : '') +
     (S.usedPct >= 80 ? vStorageBar() : '') +
     '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">' +
       '<div style="font-size:14px;color:var(--faint)">' + catalogueLabel(CATALOGUE) + '</div>' +
@@ -789,7 +850,7 @@ function vSetup() {
         info + '</div>' +
         '<button class="btn" data-a="checkCatalogue" style="flex-shrink:0"' + (S.catLoading ? ' disabled' : '') + '>' + (S.catLoading ? 'Vérification…' : 'Vérifier les mises à jour') + '</button>' +
       '</div>' +
-      '<div class="sub">Le catalogue est fourni avec l\u2019application et se met à jour automatiquement à l\u2019ouverture quand la tablette a du réseau.</div>' +
+      '<div class="sub">Le catalogue est publié par l\u2019app Admin dans le dépôt de la caisse (il ne fait pas partie de l\u2019application). La tablette le vérifie à chaque ouverture avec du réseau et propose de l\u2019installer.</div>' +
     '</section>' +
     '<section style="display:flex;flex-direction:column;gap:12px">' +
       '<h2 style="margin:0;font-size:19px;font-weight:800">Point de vente</h2>' +
@@ -800,7 +861,7 @@ function vSetup() {
       '<h2 style="margin:0;font-size:19px;font-weight:800">Envoi des ventes sur GitHub <span class="sub" style="font-weight:600">(facultatif)</span></h2>' +
       '<div class="row" style="gap:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--ground)">' +
         '<div style="display:flex;flex-direction:column;gap:2px"><strong style="font-size:17px">' + (ghReady() ? 'Déverrouillé sur cet appareil' : 'Verrouillé') + '</strong>' +
-        '<span class="sub">' + (ghReady() ? 'Dépôt ' + esc(GH_REPO) + ', appareil ' + esc(GH.appareil) + '. Les ventes ne partent que sur demande (menu ⋮ ou Ventes des jours précédents).' : 'Déverrouillez avec la phrase de passe des caisses pour pouvoir envoyer les ventes, uniquement sur demande.') + '</span></div>' +
+        '<span class="sub">' + (ghReady() ? 'Dépôt ' + esc(GH_REPO) + ', appareil ' + esc(GH.appareil) + '. Les ventes partent automatiquement dès que la tablette a internet (aussi à la main : menu ⋮ ou Ventes des jours précédents).' : 'Déverrouillez avec la phrase de passe des caisses : les ventes partiront ensuite automatiquement dès que la tablette a internet.') + '</span></div>' +
         '<button class="btn" data-a="openGh" style="flex-shrink:0">' + (ghReady() ? 'Gérer' : 'Déverrouiller') + '</button>' +
       '</div>' +
     '</section>') +
@@ -901,6 +962,16 @@ var MI = {
   refresh: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>'
 };
+/* Bandeau ☁ de l'accueil et mention de l'en-tête : état de l'envoi automatique (toucher = fenêtre GitHub) */
+function vAutoBar() {
+  var a = autoStatus(); if (!a) return '';
+  var st = a.ko ? 'background:var(--warn-bg);color:var(--red);border-color:var(--red)' : a.warn ? 'background:var(--warn-bg);color:var(--warn-text)' : 'color:var(--muted)';
+  return '<button class="autobar" data-a="openGh" style="' + st + '">☁ ' + esc(a.t) + '</button>';
+}
+function vAutoMini(sep) {
+  var a = autoStatus(); if (!a) return '';
+  return sep + '<span data-a="openGh" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (a.ko ? 'var(--red)' : a.warn ? 'var(--amber)' : 'var(--faint)') + '">☁ ' + esc(a.court) + '</span>';
+}
 function vMenu() {
   if (!S.menu) return '';
   function tile(a, icon, label, sub, extra) {
@@ -908,7 +979,7 @@ function vMenu() {
   }
   var ventes = tile('download', MI.down, 'Exporter les ventes du jour', 'Fichier à garder ou partager') +
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
-    (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer sur GitHub', 'Ventes du jour', S.ghBusy ? ' disabled' : '') : '');
+    (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
   var catalogue = (OPTIONS.ajoutArticles ? tile('openAddCat', MI.plus, 'Ajouter un article', 'Au catalogue de cet appareil') : '') +
     tile('showManage', MI.sliders, 'Gérer le catalogue', 'Activer, désactiver, prix') +
     tile('checkCatMenu', MI.refresh, S.catLoading ? 'Vérification…' : 'Vérifier le catalogue', S.siteUpdate ? 'Mise à jour disponible' : 'Installé : v' + CATALOGUE.version, S.siteUpdate ? ' style="border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)"' : '');
@@ -923,7 +994,7 @@ function vPosPhone(d, p) {
     '<button class="iconbtn" data-a="toggleTheme" aria-label="' + (isDark() ? 'Mode clair' : 'Mode sombre') + '">' + (isDark() ? ICON_SUN : ICON_MOON) + '</button>' +
     '<button class="iconbtn" data-a="toggleMenu" aria-label="Menu">' + ICON_DOTS + '</button></div>' +
     '<div class="subbar"><div class="seg"><button class="' + (S.tab === 'caisse' ? 'on' : '') + '" data-a="tab" data-v="caisse">Caisse</button><button class="' + (S.tab === 'hist' ? 'on' : '') + '" data-a="tab" data-v="hist">Historique</button></div>' +
-    '<div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + '<br>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + '</span></div></div>' +
+    '<div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + '<br>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + '</span></div></div>' +
     vStorageBar() + (S.tab === 'caisse' ? vCaisse() : S.tab === 'gestion' ? vManage() : vHist()) + '</div>' +
     vMenu();
 }
@@ -933,7 +1004,7 @@ function vPos() {
   if (PHONE) return vPosPhone(d, p);
   return '<div class="full"><div class="header"><img src="' + LOGO_TEXT + '" alt="Agri-Garden">' +
     '<div class="seg"><button class="' + (S.tab === 'caisse' ? 'on' : '') + '" data-a="tab" data-v="caisse">Caisse</button><button class="' + (S.tab === 'hist' ? 'on' : '') + '" data-a="tab" data-v="hist">Historique</button></div>' +
-    '<div style="flex:1"></div><div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + ' · ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + '</span></div>' +
+    '<div style="flex:1"></div><div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + ' · ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + '</span></div>' +
     '<button class="iconbtn" data-a="toggleTheme" aria-label="' + (isDark() ? 'Mode clair' : 'Mode sombre') + '">' + (isDark() ? ICON_SUN : ICON_MOON) + '</button>' + '<button class="iconbtn" data-a="toggleMenu" aria-label="Menu">' + ICON_DOTS + '</button></div>' +
     vStorageBar() + (S.tab === 'caisse' ? vCaisse() : S.tab === 'gestion' ? vManage() : vHist()) + '</div>' +
     vMenu();
@@ -1221,7 +1292,7 @@ document.addEventListener('input', function (e) {
   var f = e.target.dataset && e.target.dataset.f;
   if (f) { S[f] = e.target.value; render(); }
 });
-// Catalogue fourni avec l'application (catalogue.json à côté de index.html)
+// Catalogue publié par l'app Admin (catalogue.json à côté de index.html, hors paquet de l'app)
 function installCat(raw, cat) {
   try { localStorage.setItem(CAT_KEY, JSON.stringify(raw)); } catch (e) {}
   CATALOGUE = cat; S.cat = cat.categories[0].id;
@@ -1254,10 +1325,11 @@ function loadSiteCatalogue(manual) {
 }
 render();
 loadSiteCatalogue(false);
+autoSchedule(5000);
 // Stockage protégé : Chrome n'efface pas ces données de lui-même
 if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
 // Fonctionnement hors ligne
-if ('serviceWorker' in navigator && location.protocol !== 'file:') { navigator.serviceWorker.register('sw.js', { scope: '/sapin/' }).catch(function () {}); }
+if ('serviceWorker' in navigator && location.protocol !== 'file:') { navigator.serviceWorker.register('sw.js').catch(function () {}); }
 })();
 </script>
 </body>
