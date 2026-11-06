@@ -242,8 +242,8 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .hdays{display:flex;flex-wrap:wrap;gap:6px}
 .hdays .choice{height:40px;padding:0 14px;font-size:15px}
 .hsum{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin-bottom:10px;font-size:17px}
-.sale{grid-template-columns:110px minmax(0,1fr) 220px 100px 110px !important}
-.sale .act{display:flex;justify-content:flex-end}
+.sale{grid-template-columns:90px minmax(0,1fr) 200px 100px 190px !important}
+.sale .act{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
 .sale .act .btn{height:42px;padding:0 14px;font-size:15px}
 .sale.cancelled .h,.sale.cancelled .l>span:not(.annul),.sale.cancelled .pm,.sale.cancelled .tt{opacity:.45;text-decoration:line-through}
 .sale .annul{color:var(--red);font-weight:700;font-size:14px}
@@ -420,7 +420,7 @@ var S = {
   screen: 'home', tab: 'caisse', menu: false, placeId: null, pending: null, openedDate: null,
   cat: CATALOGUE ? CATALOGUE.categories[0].id : null, cart: [], ticketDisc: null, modal: null,
   discTarget: null, discType: '%', discVal: '', freeLabel: '', freePrice: '',
-  payMode: 'cash', received: '', mix: '', days: {}, toast: '', exported: {}, usedPct: 0, confirmDel: null, cartOpen: false
+  payMode: null, received: '', mix: '', days: {}, tiroir: {}, toast: '', exported: {}, usedPct: 0, confirmDel: null, cartOpen: false
 };
 // Mémoire locale (simule le fichier de la tablette)
 try {
@@ -431,6 +431,7 @@ try {
     // Ventes par jour : { "AAAA-MM-JJ": [ventes] } (reprise de l'ancien format à un seul jour)
     S.days = saved.days || {};
     S.exported = saved.exported || {};
+    S.tiroir = saved.tiroir || {};
     if (saved.sales && saved.sales.length && saved.salesDate && !S.days[saved.salesDate]) S.days[saved.salesDate] = saved.sales;
   }
 } catch (e) {}
@@ -441,7 +442,7 @@ function storageMo(n) { return (n / 1000000).toFixed(1).replace('.', ',') + ' Mo
 function refreshUsage() { S.usedPct = Math.round(storageUsed() * 100 / STORAGE_LIMIT); }
 function persist(noSync) {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ placeId: S.placeId, days: S.days, openedDate: S.openedDate, exported: S.exported }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ placeId: S.placeId, days: S.days, openedDate: S.openedDate, exported: S.exported, tiroir: S.tiroir }));
     refreshUsage();
     if (!noSync && typeof autoSchedule === 'function') autoSchedule(AUTO_DELAI); // modification : envoi automatique un peu plus tard
     return true;
@@ -473,6 +474,8 @@ function dayFile(date) {
     totalJournee: r2(sales.reduce(function (a, v) { return a + v.total; }, 0)),
     totalCash: r2(sales.reduce(function (a, v) { return a + v.paiement.cash; }, 0)),
     totalBancontact: r2(sales.reduce(function (a, v) { return a + v.paiement.bancontact; }, 0)),
+    ouverturesTiroir: S.tiroir[date] || [],
+    nombreOuverturesSansVente: (S.tiroir[date] || []).filter(function (o) { return !o.venteId; }).length,
     ventes: all
   };
 }
@@ -526,7 +529,7 @@ function ghPath(date) {
   return GH_DOSSIER + '/' + date + '_' + (slug(pl.id || 'pdv').slice(0, 12) || 'pdv') + '_' + (slug(pl.nom || 'bar').slice(0, 24) || 'bar') + '_' + GH.appareil + '.json';
 }
 /* Empreinte du contenu d'un jour : si elle change depuis le dernier envoi, le jour est à renvoyer */
-function daySig(date) { var l = salesOf(date), pl = placeOf(date) || {}; return l.length + '|' + l.filter(function (v) { return v.annulation; }).length + '|' + (pl.id || '') + '|' + (pl.nom || ''); }
+function daySig(date) { var l = salesOf(date), pl = placeOf(date) || {}; return l.length + '|' + (S.tiroir[date] || []).length + '|' + l.filter(function (v) { return v.annulation; }).length + '|' + (pl.id || '') + '|' + (pl.nom || ''); }
 function ghUrl(path) { return '/repos/' + GH_REPO + '/contents/' + path.split('/').map(encodeURIComponent).join('/'); }
 /* Envoi d'un jour (remplace le fichier de cette tablette). Lance une exception (code HTTP, ou 0 sans réseau) en cas d'échec. */
 async function ghPut(date, auto) {
@@ -571,7 +574,8 @@ var AUTO_DELAI = 15000, AUTO_MIN_INTERVALLE = 60000;
 var AUTO = { timer: null, last: 0, err: null };
 function daysToSend() {
   GH.sig = GH.sig || {};
-  return Object.keys(S.days).filter(function (d) { return S.days[d] && S.days[d].length && GH.sig[d] !== daySig(d); }).sort();
+  var ds = Object.keys(S.days).concat(Object.keys(S.tiroir)).filter(function (d, i, a) { return a.indexOf(d) === i; });
+  return ds.filter(function (d) { return ((S.days[d] && S.days[d].length) || (S.tiroir[d] && S.tiroir[d].length)) && GH.sig[d] !== daySig(d); }).sort();
 }
 function autoSchedule(delay) { if (!ghConfigured()) return; clearTimeout(AUTO.timer); AUTO.timer = setTimeout(autoSync, delay); }
 async function autoSync() {
@@ -627,6 +631,121 @@ async function ghTest() {
   render();
 }
 
+/* ---------- Imprimante de tickets et tiroir-caisse (Epson TM-m30III, service ePOS-Print) ----------
+   La caisse envoie les ordres en HTTPS à l'imprimante (même réseau Wi-Fi que la tablette). Le tiroir-caisse est branché
+   sur la prise « DK » de l'imprimante : il ne s'ouvre que sur ordre de la caisse (ou avec sa clé).
+   Une vente n'est JAMAIS bloquée par l'imprimante : en cas d'échec, la vente reste enregistrée et un message s'affiche. */
+var PR_KEY = STORE_KEY + '-imprimante';
+var PR = {};
+try { PR = JSON.parse(localStorage.getItem(PR_KEY)) || {}; } catch (e) { PR = {}; }
+function savePr() { try { localStorage.setItem(PR_KEY, JSON.stringify(PR)); return true; } catch (e) { return false; } }
+function prConfigured() { return !!PR.ip; }
+function prBase(ip) { ip = String(ip || '').trim().replace(/\/+$/, ''); return /^https?:\/\//i.test(ip) ? ip : 'https://' + ip; }
+var EPOS_NS = 'http://www.epson-pos.com/schemas/2011/03/epos-print';
+var PR_ST = { state: null, text: '', at: 0 }; // dernier état connu de l'imprimante
+function xmlEsc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]; }); }
+/* Lecture des bits d'état ePOS-Print (ASB) */
+function prDecode(st, ok, code) {
+  if (st & 0x20) return { state: 'ko', text: 'Capot ouvert' };
+  if (st & 0x80000) return { state: 'ko', text: 'Plus de papier' };
+  if (st & (0x400 | 0x800 | 0x2000)) return { state: 'ko', text: 'Erreur imprimante' };
+  if (st & 0x8) return { state: 'ko', text: 'Imprimante hors ligne' };
+  if (!ok) return { state: 'ko', text: code === 'EX_TIMEOUT' ? 'Imprimante occupée (délai dépassé)' : 'Imprimante : ' + (code || 'erreur') };
+  if (st & 0x20000) return { state: 'warn', text: 'Papier bientôt fini' };
+  return { state: 'ok', text: 'Imprimante prête' };
+}
+/* Envoi d'un document ePOS-Print. Résout toujours : { ok, text, state }. */
+function eposSend(inner, timeoutMs) {
+  timeoutMs = timeoutMs || 10000;
+  var url = prBase(PR.ip) + '/cgi-bin/epos/service.cgi?devid=' + encodeURIComponent(PR.devid || 'local_printer') + '&timeout=' + timeoutMs;
+  var soap = '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' +
+    '<epos-print xmlns="' + EPOS_NS + '">' + inner + '</epos-print></s:Body></s:Envelope>';
+  var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, timeoutMs + 5000);
+  return fetch(url, { method: 'POST', body: soap, cache: 'no-store', signal: ctrl ? ctrl.signal : undefined,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT', 'SOAPAction': '""' } })
+    .then(function (r) { return r.text(); })
+    .then(function (txt) {
+      var doc = new DOMParser().parseFromString(txt, 'text/xml'), res = doc.getElementsByTagName('response')[0];
+      if (!res) return { ok: false, state: 'ko', text: 'Réponse inattendue de l’imprimante' };
+      var ok = res.getAttribute('success') === 'true', st = parseInt(res.getAttribute('status') || '0', 10) || 0;
+      var d = prDecode(st, ok, res.getAttribute('code'));
+      return { ok: ok, state: d.state, text: d.text };
+    })
+    .catch(function () { return { ok: false, state: 'off', text: 'Imprimante injoignable' }; })
+    .then(function (r) { clearTimeout(timer); PR_ST = { state: r.state, text: r.text, at: Date.now() }; return r; });
+}
+function prHelp(r) { return r.state === 'off' ? ' Vérifiez que l\u2019imprimante est allumée, sur le même Wi-Fi que la tablette, que l\u2019adresse est juste, et que son certificat a été accepté (bouton « Accepter le certificat »).' : ''; }
+function prCheck() { if (!prConfigured()) return Promise.resolve(null); return eposSend('', 5000).then(function (r) { render(); return r; }); }
+/* Ouverture du tiroir (impulsion sur la prise DK). Toujours notée dans le journal du jour. */
+function drawerOpen(motif, venteId) {
+  if (!prConfigured()) return Promise.resolve({ ok: false });
+  logDrawer(motif, venteId);
+  return drawerPulse();
+}
+function drawerPulse() {
+  return eposSend('<pulse drawer="drawer_1" time="pulse_100"/>', 5000).then(function (r) {
+    if (!r.ok) toast('Tiroir non ouvert : ' + r.text + '. Utilisez la clé du tiroir.');
+    render(); return r;
+  });
+}
+function logDrawer(motif, venteId) {
+  var d = today(), l = S.tiroir[d] || (S.tiroir[d] = []);
+  var e = { horodatage: isoLocal(new Date()), motif: motif, venteId: venteId || null };
+  l.push(e); persist(); return e;
+}
+/* Ticket (mise en page provisoire, à retravailler avec le gérant) : 48 caractères par ligne en police A */
+var TK_W = 48;
+/* caractères absents de la page de codes de l'imprimante */
+function tkTxt(s) { return String(s).replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/\u2026/g, '...'); }
+function tkLine(left, right) { left = String(left); right = String(right || ''); var sp = TK_W - left.length - right.length; if (sp < 1) { return left + '\n' + Array(Math.max(1, TK_W - right.length) + 1).join(' ') + right; } return left + Array(sp + 1).join(' ') + right; }
+function tkMoney(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ',') + ' EUR'; }
+function ticketXml(v, opts) {
+  opts = opts || {};
+  var p = v.paiement, x = '<text lang="fr"/><text align="center"/>';
+  function t(s) { x += '<text>' + xmlEsc(tkTxt(s)) + '&#10;</text>'; }
+  if (opts.duplicata) { x += '<text reverse="true" em="true"/>'; t(' DUPLICATA '); x += '<text reverse="false" em="false"/>'; x += '<feed line="1"/>'; }
+  x += '<text dw="true" dh="true" em="true"/>'; t('Agri-Garden'); x += '<text dw="false" dh="false" em="false"/>';
+  t('Sapins de Noël');
+  if (v.pointDeVente) t(v.pointDeVente.nom);
+  x += '<feed line="1"/><text align="left"/>';
+  t(tkLine(frDate(v.horodatage) + ' ' + v.horodatage.slice(11, 16), 'N° ' + v.id));
+  t(Array(TK_W + 1).join('-'));
+  v.lignes.forEach(function (l) {
+    t(tkLine(l.quantite + ' x ' + l.libelle, tkMoney(l.total)));
+    if (l.quantite > 1 || l.remise) t('    ' + l.quantite + ' x ' + tkMoney(l.prixUnitaire) + (l.remise ? '  remise ' + discText(fromJsonDisc(l.remise)).replace('€', 'EUR') : ''));
+  });
+  t(Array(TK_W + 1).join('-'));
+  if (v.remiseTicket) { t(tkLine('Sous-total', tkMoney(v.sousTotal))); t(tkLine('Remise ' + discText(fromJsonDisc(v.remiseTicket)).replace('€', 'EUR'), '')); }
+  x += '<text em="true" dw="true"/>'; t(tkLine('TOTAL', tkMoney(v.total)).replace(/ {2,}/, function (s) { return s.slice(0, Math.max(1, s.length - TK_W / 2)); })); x += '<text em="false" dw="false"/>';
+  if (p.mode === 'cash') { t(tkLine('Payé en cash', tkMoney(p.cash))); if (opts.recu) { t(tkLine('Reçu', tkMoney(opts.recu))); t(tkLine('Rendu', tkMoney(Math.max(0, opts.recu - v.total)))); } }
+  else if (p.mode === 'bancontact') t(tkLine('Payé par Bancontact', tkMoney(p.bancontact)));
+  else { t(tkLine('Payé en cash', tkMoney(p.cash))); t(tkLine('Payé par Bancontact', tkMoney(p.bancontact))); }
+  if (v.annulation) { x += '<feed line="1"/><text em="true"/>'; t('VENTE ANNULÉE le ' + frDate(v.annulation.horodatage) + ' à ' + v.annulation.horodatage.slice(11, 16)); x += '<text em="false"/>'; }
+  x += '<feed line="1"/><text align="center"/>';
+  t('Ce ticket n’est pas une facture.');
+  t('Merci et joyeuses fêtes !');
+  if (opts.duplicata) t('Duplicata imprimé le ' + frDate(isoLocal(new Date())) + ' à ' + isoLocal(new Date()).slice(11, 16));
+  return x + '<feed line="3"/><cut type="feed"/>';
+}
+function testXml() {
+  return '<text lang="fr"/><text align="center"/><text dw="true" dh="true"/><text>Ticket test&#10;</text><text dw="false" dh="false"/>' +
+    '<text>' + xmlEsc('Caisse Sapins Agri-Garden') + '&#10;</text><text>' + xmlEsc(frDate(isoLocal(new Date())) + ' ' + isoLocal(new Date()).slice(11, 16)) + '&#10;</text>' +
+    '<text>' + xmlEsc('L’imprimante fonctionne.') + '&#10;</text><feed line="3"/><cut type="feed"/>';
+}
+/* Impression d'un ticket : en cas d'échec, fenêtre avec « Réessayer » (la vente reste enregistrée) */
+function printSale(date, id, opts) {
+  var v = salesOf(date).filter(function (x) { return x.id === id; })[0]; if (!v) return;
+  S.prBusy = true; render();
+  eposSend(ticketXml(v, opts), 15000).then(function (r) {
+    S.prBusy = false;
+    if (r.ok) toast(opts && opts.duplicata ? 'Duplicata imprimé' : 'Ticket imprimé');
+    else { S.prErr = { text: r.text, date: date, id: id, opts: opts || {} }; S.modal = 'prerr'; }
+    render();
+  });
+}
+setInterval(function () { if (prConfigured() && S.screen === 'pos' && !S.prBusy && document.visibilityState === 'visible') prCheck(); }, 30000);
+
 var toastTimer;
 function toast(t) { S.toast = t; clearTimeout(toastTimer); toastTimer = setTimeout(function () { S.toast = ''; render(); }, 3500); }
 
@@ -634,9 +753,9 @@ refreshUsage();
 
 /* ---------- Actions ---------- */
 var A = {
-  goSetup: function () { S.screen = 'setup'; S.pending = S.placeId; },
+  goSetup: function () { S.screen = 'setup'; S.pending = S.placeId; S.prIp = PR.ip || ''; S.prMsg = null; },
   pickPending: function (id) { S.pending = id; },
-  saveSetup: function () { S.placeId = S.pending; S.screen = 'home'; persist(); },
+  saveSetup: function () { S.placeId = S.pending; A.prSaveIp(); S.screen = 'home'; persist(); if (prConfigured()) prCheck(); },
   goHome: function () { S.screen = 'home'; S.menu = false; if (S.siteUpdate && !S.modal) { S.importing = S.siteUpdate; S.modal = 'import'; } },
   openPos: function () { S.screen = 'pos'; S.tab = 'caisse'; S.openedDate = today(); persist(); },
   fullscreen: function () { var el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || function () {}).call(el); },
@@ -667,7 +786,8 @@ var A = {
     S.modal = null;
   },
   removeDisc: function () { if (S.discTarget === 'ticket') S.ticketDisc = null; else S.cart[S.discTarget].disc = null; S.modal = null; },
-  close: function () { S.modal = S.modal === 'ghcfg' && S.ghBack ? S.ghBack : null; S.ghBack = null; S.ghPending = null; S.storageMsg = ''; },
+  close: function () { if (S.modal === 'pay' && S.payDrawer) { S.payDrawer = null; persist(); }
+    S.modal = S.modal === 'ghcfg' && S.ghBack ? S.ghBack : null; S.ghBack = null; S.ghPending = null; S.storageMsg = ''; },
   checkCatalogue: function () { loadSiteCatalogue(true); },
   checkCatMenu: function () { S.menu = false; if (!S.catLoading) loadSiteCatalogue(true); },
   installCatalogue: function () {
@@ -741,13 +861,18 @@ var A = {
     if (S.naCat !== '__new' && !CATALOGUE.categories.some(function (k) { return k.id === S.naCat; })) S.naCat = CATALOGUE.categories[0].id;
     toast('Article supprimé de cet appareil');
   },
-  openPay: function () { S.modal = 'pay'; S.payMode = 'cash'; S.received = ''; S.mix = ''; },
-  mode: function (m) { S.payMode = m; },
+  openPay: function () { S.modal = 'pay'; S.payMode = null; S.received = ''; S.mix = ''; S.payDrawer = null; },
+  mode: function (m) {
+    S.payMode = m;
+    /* Cash ou Mixte : le tiroir s'ouvre (une seule fois par encaissement) ; l'ouverture est rattachée à la vente à la validation */
+    if ((m === 'cash' || m === 'mix') && prConfigured() && !S.payDrawer) { S.payDrawer = logDrawer('Encaissement abandonné', null); drawerPulse(); }
+  },
   bill: function (b) { var f = S.payMode === 'mix' ? 'mix' : 'received'; S[f] = String(r2(num(S[f]) + +b)).replace('.', ','); },
   exact: function () { S.received = total().toFixed(2).replace('.', ','); },
   resetReceived: function () { S.received = ''; },
   resetMix: function () { S.mix = ''; },
   validate: function () {
+    if (!S.payMode) return;
     var t = total(), d = new Date(), p = findPlace(S.placeId), pay, msg = 'Vente enregistrée';
     if (S.payMode === 'cash') { pay = { mode: 'cash', cash: r2(t), bancontact: 0 }; msg += ' · À rendre : ' + money(Math.max(0, num(S.received) - t)); }
     else if (S.payMode === 'bc') pay = { mode: 'bancontact', cash: 0, bancontact: r2(t) };
@@ -761,9 +886,30 @@ var A = {
       lignes: S.cart.map(function (l) { return { produitId: l.produitId, categorie: l.categorie, libelle: l.name, articleLibre: !l.produitId, prixUnitaire: r2(l.price), quantite: l.qty, remise: jsonDisc(l.disc), total: r2(lineTotal(l)) }; }),
       sousTotal: r2(up5(subtotal())), remiseTicket: jsonDisc(S.ticketDisc), total: r2(t), paiement: pay
     });
+    var sale = list[list.length - 1];
+    if (S.payDrawer) { S.payDrawer.motif = 'Vente'; S.payDrawer.venteId = sale.id; S.payDrawer = null; }
+    S.lastSale = { date: today(), id: sale.id, recu: S.payMode === 'cash' ? num(S.received) : 0, msg: msg };
     S.cart = []; S.ticketDisc = null; S.modal = null; S.cartOpen = false;
-    if (persist()) toast(msg); else S.storageMsg = msg.replace('Vente enregistrée', 'Vente NON enregistrée dans l\u2019appareil');
+    if (!persist()) { S.storageMsg = msg.replace('Vente enregistrée', 'Vente NON enregistrée dans l\u2019appareil'); return; }
+    if (prConfigured()) S.modal = 'ticket'; else toast(msg);
   },
+  ticketYes: function () { var l = S.lastSale; S.modal = null; if (l) printSale(l.date, l.id, { recu: l.recu }); },
+  ticketNo: function () { S.modal = null; },
+  reprint: function (ref) { var p = (ref || '').split('|'); printSale(p[0], p[1], { duplicata: true }); },
+  prRetry: function () { var e = S.prErr; S.modal = null; S.prErr = null; if (e) printSale(e.date, e.id, e.opts); },
+  drawerAsk: function () { S.menu = false; S.modal = 'drawer'; S.drMotif = null; S.drAutre = ''; },
+  drMotif: function (m) { S.drMotif = m; },
+  drawerGo: function () {
+    var m = S.drMotif === 'Autre' ? 'Autre : ' + (S.drAutre || '').trim().slice(0, 80) : S.drMotif; if (!m) return;
+    S.modal = null; drawerOpen(m, null).then(function (r) { if (r && r.ok) toast('Tiroir ouvert (' + m + ')'); });
+  },
+  prCheckNow: function () { prCheck().then(function (r) { if (r) toast(r.text); }); },
+  prSaveIp: function () { PR.ip = (S.prIp || '').trim(); savePr(); },
+  prTest: function () { A.prSaveIp(); if (!prConfigured()) { S.prMsg = { ok: false, text: 'Indiquez l\u2019adresse de l\u2019imprimante.' }; return; }
+    S.prMsg = { ok: null, text: 'Impression du ticket test…' }; eposSend(testXml(), 10000).then(function (r) { S.prMsg = { ok: r.ok, text: r.ok ? 'Ticket test imprimé.' : r.text + prHelp(r) }; render(); }); },
+  prDrawerTest: function () { A.prSaveIp(); if (!prConfigured()) { S.prMsg = { ok: false, text: 'Indiquez l\u2019adresse de l\u2019imprimante.' }; return; }
+    S.prMsg = { ok: null, text: 'Ouverture du tiroir…' }; logDrawer('Test du tiroir', null); drawerPulse().then(function (r) { S.prMsg = { ok: r.ok, text: r.ok ? 'Le tiroir s\u2019est ouvert.' : r.text + prHelp(r) }; render(); }); },
+  prForget: function () { delete PR.ip; savePr(); S.prIp = ''; S.prMsg = null; PR_ST = { state: null, text: '', at: 0 }; },
   showJson: function () { S.menu = false; S.modal = 'json'; },
   download: function (date) {
     date = date || today();
@@ -860,6 +1006,19 @@ function vSetup() {
       '<div class="sub" style="font-size:16px">Choisissez le point de vente de cette tablette. Ce choix est mémorisé et toutes les ventes y seront liées.</div>' +
       places +
     '</section>' +
+    '<section style="display:flex;flex-direction:column;gap:12px">' +
+      '<h2 style="margin:0;font-size:19px;font-weight:800">Imprimante de tickets et tiroir-caisse <span class="sub" style="font-weight:600">(facultatif)</span></h2>' +
+      '<div class="sub">Epson TM-m30III sur le même Wi-Fi que la tablette, tiroir branché sur l\u2019imprimante. Adresse IP de l\u2019imprimante (imprimée sur la feuille d\u2019état, en maintenant le bouton FEED à l\u2019allumage). Laisser vide s\u2019il n\u2019y a pas d\u2019imprimante.</div>' +
+      '<label class="f">Adresse de l\u2019imprimante<input type="text" inputmode="url" data-f="prIp" value="' + esc(S.prIp || '') + '" placeholder="ex. 192.168.1.50" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+      '<div class="actions stack" style="justify-content:flex-start">' +
+        ((S.prIp || '').trim() ? '<a class="btn" href="' + esc(prBase(S.prIp)) + '/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none;color:var(--text)">Accepter le certificat</a>' : '') +
+        '<button class="btn" data-a="prTest"' + ((S.prIp || '').trim() ? '' : ' disabled') + '>Ticket test</button>' +
+        '<button class="btn" data-a="prDrawerTest"' + ((S.prIp || '').trim() ? '' : ' disabled') + '>Tester le tiroir</button>' +
+        (PR.ip ? '<button class="btn btn-danger" data-a="prForget">Retirer l\u2019imprimante</button>' : '') +
+      '</div>' +
+      (S.prMsg ? '<div class="result' + (S.prMsg.ok === false ? ' ko' : '') + '" style="display:block;font-size:15px;line-height:1.45">' + esc(S.prMsg.text) + '</div>' : '') +
+      '<div class="sub">Première fois sur cette tablette : touchez « Accepter le certificat », choisissez « Paramètres avancés » puis « Continuer », revenez dans la caisse, puis « Ticket test ». Si Chrome demande l\u2019accès aux appareils du réseau local, autorisez-le.</div>' +
+    '</section>' +
     (!ghConfigured() ? '' : '<section style="display:flex;flex-direction:column;gap:12px">' +
       '<h2 style="margin:0;font-size:19px;font-weight:800">Envoi des ventes sur GitHub <span class="sub" style="font-weight:600">(facultatif)</span></h2>' +
       '<div class="row" style="gap:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--ground)">' +
@@ -951,7 +1110,8 @@ function vHist() {
     html += '<div class="sale' + (an ? ' cancelled' : '') + '"><span class="h">' + v.horodatage.slice(11, 16) + '</span><div class="l">' + lines.map(function (x) { return '<span>' + x + '</span>'; }).join('') +
       (an ? '<span class="annul">Annulée à ' + an.horodatage.slice(11, 16) + (an.horodatage.slice(0, 10) !== day ? ' le ' + frDate(an.horodatage) : '') + (an.motif ? ' · ' + esc(an.motif) : '') + '</span>' : '') +
       '</div><span class="pm">' + pay + '</span><span class="tt">' + money(v.total) + '</span>' +
-      '<span class="act">' + (an ? '' : '<button class="btn btn-danger" data-a="askCancel" data-v="' + esc(day + '|' + v.id) + '">Annuler</button>') + '</span></div>';
+      '<span class="act">' + (an ? '' : (prConfigured() ? '<button class="btn" data-a="reprint" data-v="' + esc(day + '|' + v.id) + '"' + (S.prBusy ? ' disabled' : '') + '>Ticket</button>' : '') +
+        '<button class="btn btn-danger" data-a="askCancel" data-v="' + esc(day + '|' + v.id) + '">Annuler</button>') + '</span></div>';
   });
   return html + '</div></div>';
 }
@@ -963,6 +1123,7 @@ var MI = {
   plus: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>',
   sliders: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
+  drawer: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="9" rx="2"/><path d="M5 11V6h14v5M10 15.5h4"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>'
 };
 /* Bandeau ☁ de l'accueil et mention de l'en-tête : état de l'envoi automatique (toucher = fenêtre GitHub) */
@@ -975,6 +1136,11 @@ function vAutoMini(sep) {
   var a = autoStatus(); if (!a) return '';
   return sep + '<span data-a="openGh" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (a.ko ? 'var(--red)' : a.warn ? 'var(--amber)' : 'var(--faint)') + '">☁ ' + esc(a.court) + '</span>';
 }
+function vPrMini(sep) {
+  if (!prConfigured()) return '';
+  var s = PR_ST.state, txt = S.prBusy ? 'Impression…' : s === 'ok' ? 'Prête' : s === null ? 'Vérification…' : PR_ST.text;
+  return sep + '<span data-a="prCheckNow" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (s === 'ok' || s === null ? 'var(--faint)' : s === 'warn' ? 'var(--amber)' : 'var(--red)') + '">🖨 ' + esc(txt) + '</span>';
+}
 function vMenu() {
   if (!S.menu) return '';
   function tile(a, icon, label, sub, extra) {
@@ -982,6 +1148,7 @@ function vMenu() {
   }
   var ventes = tile('download', MI.down, 'Exporter les ventes du jour', 'Fichier à garder ou partager') +
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
+    (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '') +
     (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
   var catalogue = (OPTIONS.ajoutArticles ? tile('openAddCat', MI.plus, 'Ajouter un article', 'Au catalogue de cet appareil') : '') +
     (GESTION_CATALOGUE ? tile('showManage', MI.sliders, 'Gérer le catalogue', 'Activer, désactiver, prix') : '') +
@@ -997,7 +1164,7 @@ function vPosPhone(d, p) {
     '<button class="iconbtn" data-a="toggleTheme" aria-label="' + (isDark() ? 'Mode clair' : 'Mode sombre') + '">' + (isDark() ? ICON_SUN : ICON_MOON) + '</button>' +
     '<button class="iconbtn" data-a="toggleMenu" aria-label="Menu">' + ICON_DOTS + '</button></div>' +
     '<div class="subbar"><div class="seg"><button class="' + (S.tab === 'caisse' ? 'on' : '') + '" data-a="tab" data-v="caisse">Caisse</button><button class="' + (S.tab === 'hist' ? 'on' : '') + '" data-a="tab" data-v="hist">Historique</button></div>' +
-    '<div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + '<br>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + '</span></div></div>' +
+    '<div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + '<br>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + vPrMini(ghConfigured() ? ' · ' : '<br>') + '</span></div></div>' +
     vStorageBar() + (S.tab === 'caisse' ? vCaisse() : S.tab === 'gestion' ? vManage() : vHist()) + '</div>' +
     vMenu();
 }
@@ -1007,7 +1174,7 @@ function vPos() {
   if (PHONE) return vPosPhone(d, p);
   return '<div class="full"><div class="header"><img src="' + LOGO_TEXT + '" alt="Agri-Garden">' +
     '<div class="seg"><button class="' + (S.tab === 'caisse' ? 'on' : '') + '" data-a="tab" data-v="caisse">Caisse</button><button class="' + (S.tab === 'hist' ? 'on' : '') + '" data-a="tab" data-v="hist">Historique</button></div>' +
-    '<div style="flex:1"></div><div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + ' · ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + '</span></div>' +
+    '<div style="flex:1"></div><div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + ' · ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + vPrMini(ghConfigured() ? ' · ' : '<br>') + '</span></div>' +
     '<button class="iconbtn" data-a="toggleTheme" aria-label="' + (isDark() ? 'Mode clair' : 'Mode sombre') + '">' + (isDark() ? ICON_SUN : ICON_MOON) + '</button>' + '<button class="iconbtn" data-a="toggleMenu" aria-label="Menu">' + ICON_DOTS + '</button></div>' +
     vStorageBar() + (S.tab === 'caisse' ? vCaisse() : S.tab === 'gestion' ? vManage() : vHist()) + '</div>' +
     vMenu();
@@ -1171,6 +1338,29 @@ function vGhRes() {
     '<div class="actions"><button class="btn btn-primary" data-a="close">OK</button></div></div></div>';
 }
 
+function vTicket() {
+  var l = S.lastSale || {};
+  return '<div class="overlay"><div class="modal" style="width:min(520px,96vw)"><h2>Vente enregistrée</h2>' +
+    (l.recu ? '<div class="result"><b>À rendre</b><span>' + money(Math.max(0, l.recu - (salesOf(l.date).filter(function (v) { return v.id === l.id; })[0] || { total: 0 }).total)) + '</span></div>' : '') +
+    '<div style="font-size:19px;font-weight:700">Imprimer le ticket ?</div>' +
+    '<div class="actions"><button class="btn" data-a="ticketNo" style="height:60px;min-width:120px">Non</button><button class="btn btn-primary" data-a="ticketYes" style="height:60px;min-width:160px">Imprimer</button></div></div></div>';
+}
+var DRAWER_MOTIFS = ['Faire de la monnaie', 'Comptage', 'Erreur de manipulation', 'Autre'];
+function vDrawer() {
+  var ok = S.drMotif && (S.drMotif !== 'Autre' || (S.drAutre || '').trim());
+  return '<div class="overlay"><div class="modal" style="width:min(560px,96vw)"><h2>Ouvrir le tiroir sans vente</h2>' +
+    '<div class="sub">Choisissez le motif. L\u2019ouverture est enregistrée avec l\u2019heure dans le fichier du jour.</div>' +
+    '<div class="grid2">' + DRAWER_MOTIFS.map(function (m) { return '<button class="choice' + (S.drMotif === m ? ' on' : '') + '" data-a="drMotif" data-v="' + esc(m) + '">' + esc(m) + '</button>'; }).join('') + '</div>' +
+    (S.drMotif === 'Autre' ? '<label class="f">Précisez<input type="text" data-f="drAutre" value="' + esc(S.drAutre || '') + '" autocomplete="off"></label>' : '') +
+    '<div class="actions stack"><button class="btn" data-a="close">Annuler</button><button class="btn btn-primary" data-a="drawerGo"' + (ok ? '' : ' disabled') + '>Ouvrir le tiroir</button></div></div></div>';
+}
+function vPrErr() {
+  var e = S.prErr || {};
+  return '<div class="overlay"><div class="modal" style="width:min(520px,96vw)"><h2 style="color:var(--red)">Ticket non imprimé</h2>' +
+    '<div style="font-size:17px;line-height:1.5">' + esc(e.text || '') + '.' + esc(prHelp({ state: PR_ST.state })) + '</div>' +
+    '<div class="sub">La vente est bien enregistrée. Vous pouvez réessayer, ou réimprimer plus tard depuis l\u2019Historique.</div>' +
+    '<div class="actions stack"><button class="btn" data-a="close">Fermer</button><button class="btn btn-primary" data-a="prRetry">Réessayer</button></div></div></div>';
+}
 function vFree() {
   return '<div class="overlay"><div class="modal"><h2>Article libre</h2>' +
     '<label class="f">Libellé<input type="text" data-f="freeLabel" value="' + esc(S.freeLabel) + '" placeholder="ex. Sapin abîmé" autocomplete="off"></label>' +
@@ -1191,7 +1381,7 @@ function vDisc() {
 
 function vPay() {
   var t = total(), rec = num(S.received), ch = rec - t, mixC = num(S.mix);
-  var can = S.payMode === 'cash' ? rec >= t - 0.001 : S.payMode === 'mix' ? (mixC > 0 && mixC < t) : true;
+  var can = S.payMode === 'cash' ? rec >= t - 0.001 : S.payMode === 'mix' ? (mixC > 0 && mixC < t) : S.payMode === 'bc';
   var html = '<div class="overlay"><div class="modal paymodal" style="width:min(660px,96vw)"><div class="row"><h2>Encaissement</h2><span style="font-size:40px;font-weight:800">' + money(t) + '</span></div>' +
     '<div class="modes"><button class="mode' + (S.payMode === 'cash' ? ' on' : '') + '" data-a="mode" data-v="cash">Cash</button><button class="mode' + (S.payMode === 'bc' ? ' on' : '') + '" data-a="mode" data-v="bc">Bancontact</button><button class="mode' + (S.payMode === 'mix' ? ' on' : '') + '" data-a="mode" data-v="mix">Mixte</button></div>';
   function cashBody() {
@@ -1205,6 +1395,9 @@ function vPay() {
   var body;
   if (S.payMode === 'cash') {
     body = cashBody();
+  } else if (!S.payMode) {
+    body = '<div class="result" style="display:block;font-size:19px;line-height:1.5;text-align:center"><strong>Choisissez le mode de paiement</strong>' +
+      (prConfigured() ? '<div class="sub" style="margin-top:6px">Cash ou Mixte : le tiroir-caisse s\u2019ouvre.</div>' : '') + '</div>';
   } else if (S.payMode === 'bc') {
     body = '<div class="result" style="display:block;font-size:18px;line-height:1.5">Encaissez <strong style="white-space:nowrap;font-size:1.25em">' + money(t) + '</strong> sur le terminal, puis validez.</div>';
   } else {
@@ -1216,7 +1409,7 @@ function vPay() {
         : '<div class="result"><b>Reste en Bancontact</b><span>' + money(Math.max(0, t - mixC)) + '</span></div>');
   }
   var ghost = S.payMode === 'cash' ? '' : '<div class="payghost" aria-hidden="true">' + cashBody().replace(/ data-(a|v|f)="[^"]*"/g, '') + '</div>';
-  html += '<div class="paybody">' + ghost + '<div class="paycur' + (S.payMode === 'bc' ? ' mid' : '') + '">' + body + '</div></div>';
+  html += '<div class="paybody">' + ghost + '<div class="paycur' + (S.payMode === 'bc' || !S.payMode ? ' mid' : '') + '">' + body + '</div></div>';
   return html + '<div class="actions"><button class="btn" data-a="close" style="height:60px">Retour</button><button class="btn btn-primary" data-a="validate" style="height:60px;font-size:20px;padding:0 36px"' + (can ? '' : ' disabled') + '>Valider la vente</button></div></div></div>';
 }
 
@@ -1281,6 +1474,9 @@ function render() {
   else if (S.modal === 'ghcfg') html += vGhCfg();
   else if (S.modal === 'ghres') html += vGhRes();
   else if (S.modal === 'import') html += vImport();
+  else if (S.modal === 'ticket') html += vTicket();
+  else if (S.modal === 'drawer') html += vDrawer();
+  else if (S.modal === 'prerr') html += vPrErr();
   if (S.toast) html += '<div class="toast">' + esc(S.toast) + '</div>';
   app.innerHTML = html;
   if (f) { var el = app.querySelector('[data-f="' + f + '"]'); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} } }
@@ -1329,6 +1525,7 @@ function loadSiteCatalogue(manual) {
 render();
 loadSiteCatalogue(false);
 autoSchedule(5000);
+if (prConfigured()) setTimeout(prCheck, 1500);
 // Stockage protégé : Chrome n'efface pas ces données de lui-même
 if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
 // Fonctionnement hors ligne

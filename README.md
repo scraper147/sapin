@@ -70,6 +70,28 @@ Une fois configurée :
 - Fichier : `<GH_DOSSIER>/AAAA-MM-JJ_<point de vente>_<nom>_<appareil>.json` (même contenu que l'export) ; l'identifiant de l'appareil évite que deux tablettes du même point de vente s'écrasent ; chaque envoi remplace le fichier de cette tablette pour ce jour. Si le point de vente de la tablette change, l'ancien fichier du jour est supprimé.
 - Un jour envoyé compte comme exporté : il peut ensuite être effacé de la tablette.
 
+## Imprimante de tickets et tiroir-caisse
+
+Matériel : imprimante **Epson TM-m30III** (version Wi-Fi ou réseau) et tiroir **BYPOS C35** (24 V, câble RJ12 branché sur la prise « DK » de l'imprimante). Le tiroir ne s'ouvre que sur ordre de la caisse, ou avec sa clé (à garder sur le stand en cas de panne).
+
+**Installation (une fois par tablette)**
+1. Imprimante allumée et connectée au même Wi-Fi que la tablette (routeur du stand ou partage de connexion ; internet n'est pas nécessaire pour imprimer).
+2. Relever l'adresse IP de l'imprimante (feuille d'état : maintenir le bouton FEED en allumant l'imprimante).
+3. Caisse → **Paramètres de la tablette → Imprimante de tickets et tiroir-caisse** : saisir l'adresse.
+4. Toucher **Accepter le certificat** : Chrome affiche un avertissement → **Paramètres avancés → Continuer**. Revenir dans la caisse. (La caisse est en HTTPS : la tablette doit accepter une fois le certificat de l'imprimante.) Si Chrome demande l'accès aux appareils du réseau local, autoriser.
+5. **Ticket test**, puis **Tester le tiroir**, puis **Enregistrer**.
+
+Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas de ticket).
+
+**À l'usage**
+- **Encaisser** : choisir d'abord le mode de paiement. **Cash** ou **Mixte** ouvre le tiroir (une fois par encaissement). Après **Valider la vente** : « Imprimer le ticket ? » (Non / Imprimer), avec le montant à rendre.
+- **Historique** : bouton **Ticket** sur chaque vente non annulée → réimpression marquée **DUPLICATA**.
+- **⋮ → Ouvrir le tiroir** : ouverture sans vente, motif obligatoire (Faire de la monnaie, Comptage, Erreur de manipulation, Autre + précision).
+- **État de l'imprimante** dans l'en-tête de la caisse (🖨 Prête, Papier bientôt fini, Plus de papier, Capot ouvert, Imprimante injoignable), vérifié toutes les 30 s ; le toucher relance la vérification.
+- **Une vente n'est jamais bloquée par l'imprimante** : si le ticket ne sort pas, la vente reste enregistrée, la fenêtre « Ticket non imprimé » propose **Réessayer** (ou réimprimer plus tard depuis l'Historique). Si le tiroir ne s'ouvre pas : utiliser la clé.
+- **Journal du tiroir** : chaque ouverture est enregistrée avec l'heure et le motif (« Vente » + numéro de vente, « Encaissement abandonné », « Test du tiroir », ou le motif choisi). Il est inclus dans le fichier du jour (`ouverturesTiroir`, `nombreOuverturesSansVente`) et envoyé sur GitHub avec les ventes.
+- Ticket provisoire (texte seul, 48 caractères par ligne, montants en « EUR ») : sa mise en page (logo, mentions, message) reste à définir avec le gérant.
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -89,7 +111,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v12';` → `'v13'`…), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v13';` → `'v14'`…), sans changer le préfixe.
 
 ## Bonnes pratiques
 
