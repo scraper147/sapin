@@ -297,7 +297,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v15'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v16'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -807,7 +807,6 @@ function ticketXml(v, opts) {
   st('align="center"');
   if (TICKET.merci) { st('em="true"'); t(TICKET.merci); st('em="false"'); }
   if (TICKET.mention) t(TICKET.mention);
-  t('Réf. ' + v.id);
   if (opts.duplicata) { var now = isoLocal(new Date()); t('Duplicata imprimé le ' + frDate(now) + ' à ' + now.slice(11, 16)); }
   return x + '<feed line="3"/><cut type="feed"/>';
 }
