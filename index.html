@@ -284,6 +284,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
+var APP_VERSION = 'v14'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -683,6 +684,7 @@ function drawerOpen(motif, venteId) {
   logDrawer(motif, venteId);
   return drawerPulse();
 }
+function payDrawerOpen() { if (prConfigured() && !S.payDrawer) { S.payDrawer = logDrawer('Encaissement abandonné', null); drawerPulse(); } }
 function drawerPulse() {
   return eposSend('<pulse drawer="drawer_1" time="pulse_100"/>', 5000).then(function (r) {
     if (!r.ok) toast('Tiroir non ouvert : ' + r.text + '. Utilisez la clé du tiroir.');
@@ -862,13 +864,12 @@ var A = {
     toast('Article supprimé de cet appareil');
   },
   openPay: function () { S.modal = 'pay'; S.payMode = null; S.received = ''; S.mix = ''; S.payDrawer = null; },
-  mode: function (m) {
-    S.payMode = m;
-    /* Cash ou Mixte : le tiroir s'ouvre (une seule fois par encaissement) ; l'ouverture est rattachée à la vente à la validation */
-    if ((m === 'cash' || m === 'mix') && prConfigured() && !S.payDrawer) { S.payDrawer = logDrawer('Encaissement abandonné', null); drawerPulse(); }
-  },
-  bill: function (b) { var f = S.payMode === 'mix' ? 'mix' : 'received'; S[f] = String(r2(num(S[f]) + +b)).replace('.', ','); },
-  exact: function () { S.received = total().toFixed(2).replace('.', ','); },
+  /* Le mode de paiement peut être changé à tout moment avant de valider (le client change d'avis) */
+  mode: function (m) { S.payMode = m; },
+  /* Le tiroir s'ouvre quand le vendeur indique l'argent reçu (billet rapide ou montant exact), une seule fois par encaissement.
+     Montant tapé au clavier : le tiroir s'ouvre à la validation. L'ouverture est rattachée à la vente à la validation. */
+  bill: function (b) { var f = S.payMode === 'mix' ? 'mix' : 'received'; S[f] = String(r2(num(S[f]) + +b)).replace('.', ','); payDrawerOpen(); },
+  exact: function () { S.received = total().toFixed(2).replace('.', ','); payDrawerOpen(); },
   resetReceived: function () { S.received = ''; },
   resetMix: function () { S.mix = ''; },
   validate: function () {
@@ -887,7 +888,8 @@ var A = {
       sousTotal: r2(up5(subtotal())), remiseTicket: jsonDisc(S.ticketDisc), total: r2(t), paiement: pay
     });
     var sale = list[list.length - 1];
-    if (S.payDrawer) { S.payDrawer.motif = 'Vente'; S.payDrawer.venteId = sale.id; S.payDrawer = null; }
+    if (!S.payDrawer && pay.cash > 0) payDrawerOpen(); // montant tapé au clavier : ouverture à la validation
+    if (S.payDrawer) { S.payDrawer.motif = pay.cash > 0 ? 'Vente' : 'Vente payée par Bancontact (tiroir ouvert pendant l\u2019encaissement)'; S.payDrawer.venteId = sale.id; S.payDrawer = null; }
     S.lastSale = { date: today(), id: sale.id, recu: S.payMode === 'cash' ? num(S.received) : 0, msg: msg };
     S.cart = []; S.ticketDisc = null; S.modal = null; S.cartOpen = false;
     if (!persist()) { S.storageMsg = msg.replace('Vente enregistrée', 'Vente NON enregistrée dans l\u2019appareil'); return; }
@@ -977,7 +979,7 @@ function vHome() {
     (CATALOGUE ? vAutoBar() : '') +
     (S.usedPct >= 80 ? vStorageBar() : '') +
     '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">' +
-      '<div style="font-size:14px;color:var(--faint)">' + catalogueLabel(CATALOGUE) + '</div>' +
+      '<div style="font-size:14px;color:var(--faint)">' + catalogueLabel(CATALOGUE) + ' · Application ' + APP_VERSION + '</div>' +
       '<div style="display:flex;gap:8px">' +
         (p ? '<button class="btn-link" data-a="goSetup">Paramètres de la tablette</button>' : '') +
       '</div>' +
@@ -1397,7 +1399,7 @@ function vPay() {
     body = cashBody();
   } else if (!S.payMode) {
     body = '<div class="result" style="display:block;font-size:19px;line-height:1.5;text-align:center"><strong>Choisissez le mode de paiement</strong>' +
-      (prConfigured() ? '<div class="sub" style="margin-top:6px">Cash ou Mixte : le tiroir-caisse s\u2019ouvre.</div>' : '') + '</div>';
+      (prConfigured() ? '<div class="sub" style="margin-top:6px">Le tiroir-caisse s\u2019ouvre quand vous indiquez l\u2019argent reçu. Le mode peut être changé jusqu\u2019à la validation.</div>' : '') + '</div>';
   } else if (S.payMode === 'bc') {
     body = '<div class="result" style="display:block;font-size:18px;line-height:1.5">Encaissez <strong style="white-space:nowrap;font-size:1.25em">' + money(t) + '</strong> sur le terminal, puis validez.</div>';
   } else {

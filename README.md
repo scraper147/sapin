@@ -84,7 +84,7 @@ Matériel : imprimante **Epson TM-m30III** (version Wi-Fi ou réseau) et tiroir 
 Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas de ticket).
 
 **À l'usage**
-- **Encaisser** : choisir d'abord le mode de paiement. **Cash** ou **Mixte** ouvre le tiroir (une fois par encaissement). Après **Valider la vente** : « Imprimer le ticket ? » (Non / Imprimer), avec le montant à rendre.
+- **Encaisser** : choisir d'abord le mode de paiement ; il peut être changé jusqu'à la validation si le client change d'avis. Le tiroir s'ouvre quand le vendeur indique l'argent reçu (billet rapide ou **Montant exact**), une fois par encaissement ; si le montant est tapé au clavier, le tiroir s'ouvre à la validation. Après **Valider la vente** : « Imprimer le ticket ? » (Non / Imprimer), avec le montant à rendre.
 - **Historique** : bouton **Ticket** sur chaque vente non annulée → réimpression marquée **DUPLICATA**.
 - **⋮ → Ouvrir le tiroir** : ouverture sans vente, motif obligatoire (Faire de la monnaie, Comptage, Erreur de manipulation, Autre + précision).
 - **État de l'imprimante** dans l'en-tête de la caisse (🖨 Prête, Papier bientôt fini, Plus de papier, Capot ouvert, Imprimante injoignable), vérifié toutes les 30 s ; le toucher relance la vérification.
@@ -111,7 +111,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v13';` → `'v14'`…), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v14';` → `'v15'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
