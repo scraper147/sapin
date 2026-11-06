@@ -263,6 +263,19 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .phone .dayact{justify-content:flex-start}
 .phone .dayact .btn{flex:1 1 auto}
 /* Menu ⋮ en tuiles */
+.tkprev{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;min-height:0}
+.tkprev .tklist{display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:62vh}
+.tkprev .tkitem{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:15px}
+.tkprev .tkitem.on{border:2px solid var(--green);background:var(--tint)}
+.tkpaper{background:#fff;color:#111;border-radius:4px;box-shadow:0 4px 18px rgba(0,0,0,.18);padding:18px 14px 10px;font-family:ui-monospace,Menlo,Consolas,"Courier New",monospace;font-size:min(13px,calc((100vw - 60px) / 30));line-height:1.35;width:calc(48ch + 28px);max-width:100%;margin:0 auto;overflow:hidden;max-height:62vh;overflow-y:auto}
+.tkpaper .tkl{white-space:pre;min-height:1.35em}
+.tkpaper .b{font-weight:800}
+.tkpaper .dd{font-size:2em;line-height:1.1}
+.tkpaper .rv{background:#111;color:#fff}
+.tkpaper .tkcut{color:#999;text-align:center;margin-top:6px;font-size:.9em}
+.phone .tkprev{grid-template-columns:1fr}
+.phone .tkprev .tklist{max-height:26vh}
+.phone .tkpaper{max-height:none}
 .menu-back{position:absolute;inset:0;z-index:4}
 .menu.tiles{width:min(500px,94vw);padding:14px;gap:8px;max-height:calc(100% - 90px);overflow-y:auto}
 .menu.tiles .mgroup{font-size:13px;font-weight:800;color:var(--muted);padding:2px 4px 0}
@@ -284,7 +297,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v14'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v15'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -697,39 +710,144 @@ function logDrawer(motif, venteId) {
   l.push(e); persist(); return e;
 }
 /* Ticket (mise en page provisoire, à retravailler avec le gérant) : 48 caractères par ligne en police A */
-var TK_W = 48;
+/* ---------- Ticket : contenu et mise en page (proposition 1, à valider avec le gérant) ----------
+   Les champs vides ne sont pas imprimés ; dans l'aperçu, ils apparaissent comme « [à compléter] ». */
+var TICKET = {
+  activite: 'Vente de sapins de Noël',
+  adresse: [],            // ex. ['Rue de ..., 12', '5000 Namur']
+  telephone: '',          // ex. '081 00 00 00'
+  tva: '',                // ex. 'BE 0123.456.789'
+  site: '',               // ex. 'www.agri-garden.be'
+  conseil: 'Conseil : coupez 2 cm à la base du tronc, arrosez votre sapin chaque jour et placez-le loin des radiateurs.',
+  merci: 'Merci et joyeuses fêtes !',
+  mention: 'Ce ticket n’est pas une facture.'
+};
+var TK_W = 48; // caractères par ligne (police A, papier 80 mm)
 /* caractères absents de la page de codes de l'imprimante */
-function tkTxt(s) { return String(s).replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/\u2026/g, '...'); }
-function tkLine(left, right) { left = String(left); right = String(right || ''); var sp = TK_W - left.length - right.length; if (sp < 1) { return left + '\n' + Array(Math.max(1, TK_W - right.length) + 1).join(' ') + right; } return left + Array(sp + 1).join(' ') + right; }
-function tkMoney(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ',') + ' EUR'; }
+function tkTxt(s) { return String(s).replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...').replace(/−/g, '-').replace(/ /g, ' '); }
+function tkDiscLabel(r, base) { return r.type === 'pourcentage' ? base + ' ' + String(r.valeur).replace('.', ',') + ' %' : base; }
+function tkMoney(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
+function tkLine(left, right, w) { w = w || TK_W; left = String(left); right = String(right || ''); var sp = w - left.length - right.length; if (sp < 1) return tkWrap(left, w).concat([pad2(right, w)]).join('\n'); return left + Array(sp + 1).join(' ') + right; }
+function pad2(right, w) { return Array(Math.max(0, w - right.length) + 1).join(' ') + right; }
+/* coupe un texte en lignes de w caractères (au niveau des espaces) */
+function tkWrap(s, w) {
+  w = w || TK_W; var out = [], line = '';
+  String(s).split(/\s+/).forEach(function (word) {
+    while (word.length > w) { if (line) { out.push(line); line = ''; } out.push(word.slice(0, w)); word = word.slice(w); }
+    if (!word) return;
+    if (!line) line = word; else if (line.length + 1 + word.length <= w) line += ' ' + word; else { out.push(line); line = word; }
+  });
+  if (line) out.push(line);
+  return out;
+}
+/* Logo en noir et blanc pour l'imprimante (raster 1 bit, 384 points de large ≈ 2/3 du papier). Préparé une fois au démarrage. */
+var LOGO_RASTER = null;
+(function () {
+  try {
+    var img = new Image();
+    img.onload = function () {
+      var w = 384, h = Math.round(img.height * w / img.width), c = document.createElement('canvas'); c.width = w; c.height = h;
+      var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+      var px = g.getImageData(0, 0, w, h).data, bpr = Math.ceil(w / 8), bytes = new Uint8Array(bpr * h);
+      for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+        var i = (y * w + x) * 4, m = Math.min(px[i], px[i + 1], px[i + 2]); // gris du dessin et vert du texte → noir
+        if (m < 175) bytes[y * bpr + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+      var s = ''; for (var k = 0; k < bytes.length; k++) s += String.fromCharCode(bytes[k]);
+      LOGO_RASTER = { w: w, h: h, data: btoa(s) };
+      if (S.modal === 'tkprev') render();
+    };
+    img.src = LOGO_FULL;
+  } catch (e) {}
+})();
 function ticketXml(v, opts) {
   opts = opts || {};
-  var p = v.paiement, x = '<text lang="fr"/><text align="center"/>';
+  var p = v.paiement, x = '<text lang="fr"/>', ap = !!opts.apercu, SEP = Array(TK_W + 1).join('-'), SEP2 = Array(TK_W + 1).join('=');
   function t(s) { x += '<text>' + xmlEsc(tkTxt(s)) + '&#10;</text>'; }
-  if (opts.duplicata) { x += '<text reverse="true" em="true"/>'; t(' DUPLICATA '); x += '<text reverse="false" em="false"/>'; x += '<feed line="1"/>'; }
-  x += '<text dw="true" dh="true" em="true"/>'; t('Agri-Garden'); x += '<text dw="false" dh="false" em="false"/>';
-  t('Sapins de Noël');
-  if (v.pointDeVente) t(v.pointDeVente.nom);
-  x += '<feed line="1"/><text align="left"/>';
-  t(tkLine(frDate(v.horodatage) + ' ' + v.horodatage.slice(11, 16), 'N° ' + v.id));
-  t(Array(TK_W + 1).join('-'));
+  function st(a) { x += '<text ' + a + '/>'; }
+  function opt(val, label) { if (val) t(val); else if (ap) t('[' + label + ' à compléter]'); }
+  st('align="center"');
+  if (opts.duplicata) { st('reverse="true" em="true" dw="true" dh="true"'); t(' DUPLICATA '); st('reverse="false" em="false" dw="false" dh="false"'); x += '<feed line="1"/>'; }
+  if (LOGO_RASTER) x += '<image width="' + LOGO_RASTER.w + '" height="' + LOGO_RASTER.h + '" color="color_1" mode="mono">' + LOGO_RASTER.data + '</image>';
+  else { st('dw="true" dh="true" em="true"'); t('Agri-Garden'); st('dw="false" dh="false" em="false"'); }
+  if (TICKET.activite) { st('em="true"'); t(TICKET.activite); st('em="false"'); }
+  (TICKET.adresse.length ? TICKET.adresse : ap ? [''] : []).forEach(function (l) { opt(l, 'Adresse'); });
+  opt(TICKET.telephone ? 'Tél. ' + TICKET.telephone : '', 'Téléphone');
+  opt(TICKET.tva ? 'TVA ' + TICKET.tva : '', 'N° TVA');
+  if (TICKET.site || ap) opt(TICKET.site, 'Site web');
+  x += '<feed line="1"/>';
+  st('align="left"');
+  var num = v.id.split('-').pop();
+  t(tkLine('Ticket n° ' + num, frDate(v.horodatage) + ' ' + v.horodatage.slice(11, 16)));
+  if (v.pointDeVente) t('Point de vente : ' + v.pointDeVente.nom);
+  t(SEP2);
+  var nb = 0;
   v.lignes.forEach(function (l) {
-    t(tkLine(l.quantite + ' x ' + l.libelle, tkMoney(l.total)));
-    if (l.quantite > 1 || l.remise) t('    ' + l.quantite + ' x ' + tkMoney(l.prixUnitaire) + (l.remise ? '  remise ' + discText(fromJsonDisc(l.remise)).replace('€', 'EUR') : ''));
+    nb += l.quantite;
+    var brut = r2(l.prixUnitaire * l.quantite);
+    if (l.quantite === 1 && !l.remise) { t(tkLine(l.libelle, tkMoney(l.total))); return; }
+    tkWrap(l.libelle).forEach(function (s) { t(s); });
+    t(tkLine('   ' + l.quantite + ' x ' + tkMoney(l.prixUnitaire), tkMoney(brut)));
+    if (l.remise) t(tkLine('   ' + tkDiscLabel(l.remise, 'Remise'), '-' + tkMoney(brut - l.total)));
   });
-  t(Array(TK_W + 1).join('-'));
-  if (v.remiseTicket) { t(tkLine('Sous-total', tkMoney(v.sousTotal))); t(tkLine('Remise ' + discText(fromJsonDisc(v.remiseTicket)).replace('€', 'EUR'), '')); }
-  x += '<text em="true" dw="true"/>'; t(tkLine('TOTAL', tkMoney(v.total)).replace(/ {2,}/, function (s) { return s.slice(0, Math.max(1, s.length - TK_W / 2)); })); x += '<text em="false" dw="false"/>';
-  if (p.mode === 'cash') { t(tkLine('Payé en cash', tkMoney(p.cash))); if (opts.recu) { t(tkLine('Reçu', tkMoney(opts.recu))); t(tkLine('Rendu', tkMoney(Math.max(0, opts.recu - v.total)))); } }
-  else if (p.mode === 'bancontact') t(tkLine('Payé par Bancontact', tkMoney(p.bancontact)));
-  else { t(tkLine('Payé en cash', tkMoney(p.cash))); t(tkLine('Payé par Bancontact', tkMoney(p.bancontact))); }
-  if (v.annulation) { x += '<feed line="1"/><text em="true"/>'; t('VENTE ANNULÉE le ' + frDate(v.annulation.horodatage) + ' à ' + v.annulation.horodatage.slice(11, 16)); x += '<text em="false"/>'; }
-  x += '<feed line="1"/><text align="center"/>';
-  t('Ce ticket n’est pas une facture.');
-  t('Merci et joyeuses fêtes !');
-  if (opts.duplicata) t('Duplicata imprimé le ' + frDate(isoLocal(new Date())) + ' à ' + isoLocal(new Date()).slice(11, 16));
+  t(SEP);
+  if (v.remiseTicket) {
+    t(tkLine('Sous-total', tkMoney(v.sousTotal)));
+    t(tkLine(tkDiscLabel(v.remiseTicket, 'Remise sur le ticket'), '-' + tkMoney(v.sousTotal - v.total)));
+  }
+  st('em="true" dw="true" dh="true"'); t(tkLine('TOTAL', tkMoney(v.total) + ' EUR', TK_W / 2)); st('em="false" dw="false" dh="false"');
+  t(nb + ' article' + (nb > 1 ? 's' : ''));
+  t(SEP);
+  if (p.mode === 'cash' || p.mode === 'mixte') t(tkLine('Cash', tkMoney(p.cash)));
+  if (p.mode === 'bancontact' || p.mode === 'mixte') t(tkLine('Bancontact', tkMoney(p.bancontact)));
+  if (p.mode === 'cash' && opts.recu) { t(tkLine('Reçu', tkMoney(opts.recu))); t(tkLine('Rendu', tkMoney(Math.max(0, opts.recu - v.total)))); }
+  if (v.annulation) { x += '<feed line="1"/>'; st('em="true"'); t('VENTE ANNULÉE le ' + frDate(v.annulation.horodatage) + ' à ' + v.annulation.horodatage.slice(11, 16)); st('em="false"'); }
+  x += '<feed line="1"/>';
+  if (TICKET.conseil) { tkWrap(TICKET.conseil).forEach(function (s) { t(s); }); x += '<feed line="1"/>'; }
+  st('align="center"');
+  if (TICKET.merci) { st('em="true"'); t(TICKET.merci); st('em="false"'); }
+  if (TICKET.mention) t(TICKET.mention);
+  t('Réf. ' + v.id);
+  if (opts.duplicata) { var now = isoLocal(new Date()); t('Duplicata imprimé le ' + frDate(now) + ' à ' + now.slice(11, 16)); }
   return x + '<feed line="3"/><cut type="feed"/>';
 }
+/* Aperçu : rendu en page web du document envoyé à l'imprimante (mêmes données que l'impression) */
+function ticketHtml(xml) {
+  var doc = new DOMParser().parseFromString('<r xmlns="' + EPOS_NS + '">' + xml + '</r>', 'text/xml');
+  var stt = { align: 'left', em: false, dw: false, dh: false, reverse: false }, out = '', line = '';
+  function flush(force) { out += '<div class="tkl" style="text-align:' + stt.align + '">' + (line || (force ? '&nbsp;' : '&nbsp;')) + '</div>'; line = ''; }
+  Array.prototype.forEach.call(doc.documentElement.childNodes, function (n) {
+    if (n.nodeType !== 1) return;
+    if (n.localName === 'text') {
+      ['align'].forEach(function (a) { if (n.hasAttribute(a)) stt.align = n.getAttribute(a); });
+      ['em', 'dw', 'dh', 'reverse'].forEach(function (a) { if (n.hasAttribute(a)) stt[a] = n.getAttribute(a) === 'true'; });
+      var txt = n.textContent; if (!txt) return;
+      txt.split('\n').forEach(function (part, i, arr) {
+        if (part) line += '<span class="' + (stt.em ? 'b ' : '') + (stt.dw && stt.dh ? 'dd ' : '') + (stt.reverse ? 'rv' : '') + '">' + esc(part).replace(/ /g, '&nbsp;') + '</span>';
+        if (i < arr.length - 1) flush();
+      });
+    } else if (n.localName === 'feed') { for (var k = +(n.getAttribute('line') || 1); k > 0; k--) flush(true); }
+    else if (n.localName === 'image') {
+      var w = +n.getAttribute('width'), h = +n.getAttribute('height'), bin = atob(n.textContent), bpr = Math.ceil(w / 8);
+      var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'), id = g.createImageData(w, h);
+      for (var y = 0; y < h; y++) for (var xx = 0; xx < w; xx++) { var on = bin.charCodeAt(y * bpr + (xx >> 3)) & (0x80 >> (xx & 7)), j = (y * w + xx) * 4; id.data[j] = id.data[j + 1] = id.data[j + 2] = on ? 20 : 255; id.data[j + 3] = 255; }
+      g.putImageData(id, 0, 0);
+      out += '<div style="text-align:' + stt.align + '"><img src="' + c.toDataURL() + '" style="width:' + (w / 576 * 100) + '%;image-rendering:pixelated" alt=""></div>';
+    } else if (n.localName === 'cut') { out += '<div class="tkcut">✂ - - - - - - - - - - - - - - - - - - -</div>'; }
+  });
+  if (line) flush();
+  return out;
+}
+/* Vente d'exemple (s'il n'y a encore aucune vente sur l'appareil) */
+function sampleSale() {
+  var prods = []; (CATALOGUE ? CATALOGUE.categories : []).forEach(function (k) { k.produits.forEach(function (pp) { prods.push({ k: k, p: pp }); }); });
+  var a = prods[2] || prods[0], b = prods[prods.length - 1];
+  var l1 = a ? { produitId: a.p.id, categorie: a.k.nom, libelle: (a.k.prefixe ? a.k.nom + ' ' : '') + a.p.libelle, articleLibre: false, prixUnitaire: a.p.prix, quantite: 1, remise: null, total: a.p.prix } : null;
+  var l2 = b ? { produitId: b.p.id, categorie: b.k.nom, libelle: (b.k.prefixe ? b.k.nom + ' ' : '') + b.p.libelle, articleLibre: false, prixUnitaire: b.p.prix, quantite: 2, remise: { type: 'pourcentage', valeur: 10 }, total: applyDisc(b.p.prix * 2, { type: '%', val: 10 }) } : null;
+  var lignes = [l1, l2].filter(Boolean), tot = r2(lignes.reduce(function (s, l) { return s + l.total; }, 0)), pl = findPlace(S.placeId) || (CATALOGUE && CATALOGUE.pointsDeVente[0]) || { id: 'pdv', nom: 'Point de vente' };
+  return { id: pl.id + '-' + today().replace(/-/g, '') + '-0042', horodatage: isoLocal(new Date()), pointDeVente: { id: pl.id, nom: pl.nom }, lignes: lignes, sousTotal: tot, remiseTicket: null, total: tot, paiement: { mode: 'cash', cash: tot, bancontact: 0 }, exemple: true };
+}
+function exampleRecu(t) { var b = [5, 10, 20, 50, 100, 200, 500].filter(function (x) { return x >= t; })[0]; return b || Math.ceil(t / 100) * 100; }
 function testXml() {
   return '<text lang="fr"/><text align="center"/><text dw="true" dh="true"/><text>Ticket test&#10;</text><text dw="false" dh="false"/>' +
     '<text>' + xmlEsc('Caisse Sapins Agri-Garden') + '&#10;</text><text>' + xmlEsc(frDate(isoLocal(new Date())) + ' ' + isoLocal(new Date()).slice(11, 16)) + '&#10;</text>' +
@@ -912,6 +1030,11 @@ var A = {
   prDrawerTest: function () { A.prSaveIp(); if (!prConfigured()) { S.prMsg = { ok: false, text: 'Indiquez l\u2019adresse de l\u2019imprimante.' }; return; }
     S.prMsg = { ok: null, text: 'Ouverture du tiroir…' }; logDrawer('Test du tiroir', null); drawerPulse().then(function (r) { S.prMsg = { ok: r.ok, text: r.ok ? 'Le tiroir s\u2019est ouvert.' : r.text + prHelp(r) }; render(); }); },
   prForget: function () { delete PR.ip; savePr(); S.prIp = ''; S.prMsg = null; PR_ST = { state: null, text: '', at: 0 }; },
+  tkPrev: function () { S.menu = false; S.modal = 'tkprev'; S.tkDay = today(); S.tkId = null; S.tkDup = false; },
+  tkDay: function (d) { S.tkDay = d; S.tkId = null; },
+  tkSel: function (id) { S.tkId = id; },
+  tkDup: function (v) { S.tkDup = v === '1'; },
+  tkPrint: function () { var v = tkPrevSale(); if (!v || v.exemple) return; S.modal = null; printSale(S.tkDay, v.id, { duplicata: true }); },
   showJson: function () { S.menu = false; S.modal = 'json'; },
   download: function (date) {
     date = date || today();
@@ -1126,6 +1249,7 @@ var MI = {
   sliders: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
   drawer: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="9" rx="2"/><path d="M5 11V6h14v5M10 15.5h4"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>'
 };
 /* Bandeau ☁ de l'accueil et mention de l'en-tête : état de l'envoi automatique (toucher = fenêtre GitHub) */
@@ -1150,6 +1274,7 @@ function vMenu() {
   }
   var ventes = tile('download', MI.down, 'Exporter les ventes du jour', 'Fichier à garder ou partager') +
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
+    tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
     (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '') +
     (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
   var catalogue = (OPTIONS.ajoutArticles ? tile('openAddCat', MI.plus, 'Ajouter un article', 'Au catalogue de cet appareil') : '') +
@@ -1363,6 +1488,25 @@ function vPrErr() {
     '<div class="sub">La vente est bien enregistrée. Vous pouvez réessayer, ou réimprimer plus tard depuis l\u2019Historique.</div>' +
     '<div class="actions stack"><button class="btn" data-a="close">Fermer</button><button class="btn btn-primary" data-a="prRetry">Réessayer</button></div></div></div>';
 }
+function tkPrevSale() {
+  var list = salesOf(S.tkDay); if (!list.length) return sampleSale();
+  return list.filter(function (v) { return v.id === S.tkId; })[0] || list[list.length - 1];
+}
+function vTkPrev() {
+  var days = histDays(), list = salesOf(S.tkDay), v = tkPrevSale();
+  var opts = { apercu: true, duplicata: S.tkDup, recu: !S.tkDup && v.paiement.mode === 'cash' ? exampleRecu(v.total) : 0 };
+  var left = '<div style="display:flex;flex-direction:column;gap:10px;min-width:0">' +
+    (days.length > 1 ? '<div class="hdays">' + days.map(function (d) { return '<button class="choice' + (d === S.tkDay ? ' on' : '') + '" data-a="tkDay" data-v="' + d + '">' + (d === today() ? 'Aujourd\u2019hui' : frDate(d).slice(0, 5)) + '</button>'; }).join('') + '</div>' : '') +
+    '<div class="tklist">' + (list.length ? list.slice().reverse().map(function (s) {
+      return '<button class="tkitem' + (s.id === v.id ? ' on' : '') + '" data-a="tkSel" data-v="' + esc(s.id) + '"><span><strong>' + s.horodatage.slice(11, 16) + '</strong> · ' + esc(s.lignes.map(function (l) { return l.quantite + ' × ' + l.libelle; }).join(', ')) + (s.annulation ? ' <em style="color:var(--red)">(annulée)</em>' : '') + '</span><strong style="white-space:nowrap">' + money(s.total) + '</strong></button>';
+    }).join('') : '<div class="sub">Aucune vente ce jour-là : aperçu sur une vente d\u2019exemple.</div>') + '</div>' +
+    '<div class="seg" style="align-self:flex-start"><button class="' + (S.tkDup ? '' : 'on') + '" data-a="tkDup" data-v="0">Ticket</button><button class="' + (S.tkDup ? 'on' : '') + '" data-a="tkDup" data-v="1">Duplicata</button></div>' +
+    '<div class="sub">Aperçu provisoire : les mentions « [à compléter] » ne sont pas imprimées tant qu\u2019elles sont vides.' + (opts.recu ? ' Montant reçu d\u2019exemple : ' + money(opts.recu) + '.' : '') + '</div>' +
+    '</div>';
+  return '<div class="overlay"><div class="modal" style="width:min(980px,98vw);max-height:96%"><div class="row"><h2>Aperçu du ticket</h2><div style="display:flex;gap:8px">' +
+    (prConfigured() && !v.exemple ? '<button class="btn" data-a="tkPrint"' + (S.prBusy ? ' disabled' : '') + '>Imprimer</button>' : '') + '<button class="btn" data-a="close">Fermer</button></div></div>' +
+    '<div class="tkprev">' + left + '<div class="tkpaper">' + ticketHtml(ticketXml(v, opts)) + '</div></div></div></div>';
+}
 function vFree() {
   return '<div class="overlay"><div class="modal"><h2>Article libre</h2>' +
     '<label class="f">Libellé<input type="text" data-f="freeLabel" value="' + esc(S.freeLabel) + '" placeholder="ex. Sapin abîmé" autocomplete="off"></label>' +
@@ -1477,6 +1621,7 @@ function render() {
   else if (S.modal === 'ghres') html += vGhRes();
   else if (S.modal === 'import') html += vImport();
   else if (S.modal === 'ticket') html += vTicket();
+  else if (S.modal === 'tkprev') html += vTkPrev();
   else if (S.modal === 'drawer') html += vDrawer();
   else if (S.modal === 'prerr') html += vPrErr();
   if (S.toast) html += '<div class="toast">' + esc(S.toast) + '</div>';

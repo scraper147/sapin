@@ -90,7 +90,8 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - **État de l'imprimante** dans l'en-tête de la caisse (🖨 Prête, Papier bientôt fini, Plus de papier, Capot ouvert, Imprimante injoignable), vérifié toutes les 30 s ; le toucher relance la vérification.
 - **Une vente n'est jamais bloquée par l'imprimante** : si le ticket ne sort pas, la vente reste enregistrée, la fenêtre « Ticket non imprimé » propose **Réessayer** (ou réimprimer plus tard depuis l'Historique). Si le tiroir ne s'ouvre pas : utiliser la clé.
 - **Journal du tiroir** : chaque ouverture est enregistrée avec l'heure et le motif (« Vente » + numéro de vente, « Encaissement abandonné », « Test du tiroir », ou le motif choisi). Il est inclus dans le fichier du jour (`ouverturesTiroir`, `nombreOuverturesSansVente`) et envoyé sur GitHub avec les ventes.
-- Ticket provisoire (texte seul, 48 caractères par ligne, montants en « EUR ») : sa mise en page (logo, mentions, message) reste à définir avec le gérant.
+- **Ticket** (proposition 1, à valider avec le gérant) : logo Agri-Garden en noir et blanc, activité, adresse / téléphone / TVA / site (bloc `TICKET` en haut du module « Ticket » dans `index.html` ; un champ vide n'est pas imprimé), n° de ticket, date, point de vente, articles (quantité × prix, remises), TOTAL en grand, nombre d'articles, paiement (cash reçu / rendu), conseil d'entretien du sapin, « Merci et joyeuses fêtes ! », « Ce ticket n'est pas une facture. », référence complète. 48 caractères par ligne, montants sans symbole (« EUR » au total).
+- **⋮ → Aperçu du ticket** (sans imprimante) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
 
 ## Annuler une vente
 
@@ -111,7 +112,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v14';` → `'v15'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v15';` → `'v16'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
