@@ -297,7 +297,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v16'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v17'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -714,10 +714,11 @@ function logDrawer(motif, venteId) {
    Les champs vides ne sont pas imprimés ; dans l'aperçu, ils apparaissent comme « [à compléter] ». */
 var TICKET = {
   activite: 'Vente de sapins de Noël',
-  adresse: [],            // ex. ['Rue de ..., 12', '5000 Namur']
-  telephone: '',          // ex. '081 00 00 00'
-  tva: '',                // ex. 'BE 0123.456.789'
-  site: '',               // ex. 'www.agri-garden.be'
+  adresse: ['Rue de Soye, 6', '5190 Spy'],
+  telephone: '0494 36 36 74', // imprimé seul, sans libellé
+  email: 'vaerman_xavier@hotmail.com',
+  tva: 'BE 0782.523.348',
+  site: '',               // pas de site : ligne non imprimée
   conseil: 'Conseil : coupez 2 cm à la base du tronc, arrosez votre sapin chaque jour et placez-le loin des radiateurs.',
   merci: 'Merci et joyeuses fêtes !',
   mention: 'Ce ticket n’est pas une facture.'
@@ -772,9 +773,10 @@ function ticketXml(v, opts) {
   else { st('dw="true" dh="true" em="true"'); t('Agri-Garden'); st('dw="false" dh="false" em="false"'); }
   if (TICKET.activite) { st('em="true"'); t(TICKET.activite); st('em="false"'); }
   (TICKET.adresse.length ? TICKET.adresse : ap ? [''] : []).forEach(function (l) { opt(l, 'Adresse'); });
-  opt(TICKET.telephone ? 'Tél. ' + TICKET.telephone : '', 'Téléphone');
+  opt(TICKET.telephone || '', 'Téléphone');
+  opt(TICKET.email || '', 'E-mail');
   opt(TICKET.tva ? 'TVA ' + TICKET.tva : '', 'N° TVA');
-  if (TICKET.site || ap) opt(TICKET.site, 'Site web');
+  if (TICKET.site) t(TICKET.site);
   x += '<feed line="1"/>';
   st('align="left"');
   var num = v.id.split('-').pop();
