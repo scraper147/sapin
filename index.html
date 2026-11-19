@@ -333,14 +333,16 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .skrow.open{border-bottom:none}
 .skdet{display:flex;flex-wrap:wrap;gap:6px 18px;padding:0 0 10px;border-bottom:1px solid var(--soft);font-size:15px;color:var(--muted)}
 .skdet b{color:var(--text)}
-.free.deliv{margin-left:0}
-.free.deliv.done{border-style:solid;border-color:var(--line2);color:var(--muted)}
+.free.deliv{margin-left:0;display:inline-flex;align-items:center;gap:8px;border:2px solid var(--green);background:var(--tint);color:var(--green);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.free.deliv svg{flex-shrink:0}
+.free.deliv:active{transform:translateY(1px);box-shadow:none}
+.free.deliv.done{border-color:var(--line2);background:var(--soft);color:var(--muted);box-shadow:none}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v20'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v21'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -1579,7 +1581,7 @@ function vCaisse() {
     '<button class="free" data-a="openFree">+ Article libre</button>' + (function () {
       var d = deliveryProduct(); if (!d) return '';
       var inCart = S.cart.some(function (l) { return l.produitId === d.p.id; });
-      return '<button class="free deliv' + (inCart ? ' done' : '') + '" data-a="addDelivery"' + (inCart ? ' disabled' : '') + '>' + (inCart ? '✓ Livraison' : '+ Livraison · ' + money(d.p.prix)) + '</button>';
+      return '<button class="free deliv' + (inCart ? ' done' : '') + '" data-a="addDelivery"' + (inCart ? ' disabled' : '') + '>' + '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4h13v12H1zM14 8h4l4 4v4h-8z"/><circle cx="5.5" cy="18" r="2"/><circle cx="18.5" cy="18" r="2"/></svg><span>' + (inCart ? 'Livraison ajoutée' : 'Livraison') + '</span></button>';
     })() + '</div><div class="products">' +
     (CATS.length ? '' : '<div class="emptycat">Aucun article actif. ' + (GESTION_CATALOGUE ? 'Réactivez-en dans <strong>⋮ → Gérer le catalogue</strong>.' : 'Le catalogue doit être complété dans l\u2019app Admin.') + '</div>') +
     (function () { var st = stockOfPlace(); return cat.produits.map(function (p) {
