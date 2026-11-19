@@ -343,12 +343,16 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .sale .link{color:var(--green);font-weight:700}
 .sale .act .hdeliv{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--green);background:var(--tint);color:var(--green);font-weight:800}
 .sale .act .hdeliv svg{flex-shrink:0}
+.phone .subbar .place{min-width:0}
+.phone .subbar .seg button{padding:0 12px}
+.phone .subbar .place>span{min-width:0;max-width:100%}
+.phone .subbar .place span span{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v23'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v24'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -604,7 +608,7 @@ function ghPath(date) {
   return GH_DOSSIER + '/' + date + '_' + (slug(pl.id || 'pdv').slice(0, 12) || 'pdv') + '_' + (slug(pl.nom || 'bar').slice(0, 24) || 'bar') + '_' + GH.appareil + '.json';
 }
 /* Empreinte du contenu d'un jour : si elle change depuis le dernier envoi, le jour est à renvoyer */
-function daySig(date) { var l = salesOf(date), pl = placeOf(date) || {}; return l.length + '|' + (S.tiroir[date] || []).length + '|' + l.filter(function (v) { return v.annulation; }).length + '|' + (pl.id || '') + '|' + (pl.nom || ''); }
+function daySig(date) { var l = salesOf(date), pl = placeOf(date) || {}; return l.length + '|' + r2(l.reduce(function (a, v) { return a + v.total; }, 0)) + '|' + (S.tiroir[date] || []).length + '|' + l.filter(function (v) { return v.annulation; }).length + '|' + (pl.id || '') + '|' + (pl.nom || ''); }
 function ghUrl(path) { return '/repos/' + GH_REPO + '/contents/' + path.split('/').map(encodeURIComponent).join('/'); }
 /* Envoi d'un jour (remplace le fichier de cette tablette). Lance une exception (code HTTP, ou 0 sans réseau) en cas d'échec. */
 async function ghPut(date, auto) {
@@ -1122,6 +1126,7 @@ function ticketXml(v, opts) {
   var num = v.id.split('-').pop();
   t(tkLine('Ticket n° ' + num, frDate(v.horodatage) + ' ' + v.horodatage.slice(11, 16)));
   if (v.pointDeVente) t('Point de vente : ' + v.pointDeVente.nom);
+  if (v.livraisonAjoutee) t('Livraison ajoutée le ' + frDate(v.livraisonAjoutee.horodatage).slice(0, 5) + ' à ' + v.livraisonAjoutee.horodatage.slice(11, 16));
   if (v.venteLiee) { var lo = findSale(v.venteLiee); t('Livraison de la vente n° ' + saleNum(v.venteLiee) + (lo ? ' du ' + frDate(lo.date).slice(0, 5) : '')); }
   t(SEP2);
   var nb = 0;
@@ -1233,6 +1238,24 @@ var A = {
     var i = S.cart.findIndex(function (l) { return l.produitId === pid && l.price === it.prix; });
     if (i >= 0) S.cart[i].qty++;
     else S.cart.push({ produitId: pid, categorie: c.nom, name: c.prefixe ? c.nom + ' ' + it.libelle : it.libelle, price: it.prix, qty: 1, disc: null });
+  },
+  /* Livraison ajoutée après coup : la ligne et le paiement s'ajoutent à la vente d'origine (même jour de vente) */
+  validateAfter: function (t, pay, msg) {
+    var o = findSale(S.after.id); if (!o || o.v.annulation) { restoreCart(); S.modal = null; return; }
+    var v = o.v, now = isoLocal(new Date());
+    S.cart.forEach(function (l) { v.lignes.push({ produitId: l.produitId, categorie: l.categorie, libelle: l.name, articleLibre: !l.produitId, prixUnitaire: r2(l.price), quantite: l.qty, remise: jsonDisc(l.disc), total: r2(lineTotal(l)) }); });
+    v.sousTotal = r2(v.sousTotal + t); v.total = r2(v.total + t);
+    var p = v.paiement; p.cash = r2(p.cash + pay.cash); p.bancontact = r2(p.bancontact + pay.bancontact);
+    p.mode = p.cash > 0 && p.bancontact > 0 ? 'mixte' : p.bancontact > 0 ? 'bancontact' : 'cash';
+    v.livraisonAjoutee = { horodatage: now, montant: r2(t), paiement: pay };
+    if (!S.payDrawer && pay.cash > 0) payDrawerOpen();
+    if (S.payDrawer) { S.payDrawer.motif = 'Livraison ajoutée à la vente n° ' + saleNum(v.id) + (pay.cash > 0 ? '' : ' (payée par Bancontact, tiroir ouvert pendant l\u2019encaissement)'); S.payDrawer.venteId = v.id; S.payDrawer = null; }
+    delete S.exported[o.date]; // le fichier de ce jour change : il sera renvoyé (ou à re-télécharger)
+    msg = msg.replace('Vente enregistrée', 'Livraison ajoutée à la vente de ' + v.horodatage.slice(11, 16));
+    S.lastSale = { date: o.date, id: v.id, recu: 0, msg: msg, titre: 'Livraison ajoutée', rendu: S.payMode === 'cash' ? Math.max(0, num(S.received) - t) : null };
+    S.modal = null; restoreCart();
+    if (!persist()) { S.storageMsg = 'Livraison NON enregistrée dans l\u2019appareil'; return; }
+    if (prConfigured()) S.modal = 'ticket'; else toast(msg);
   },
   histDeliv: function (id) {
     var d = deliveryProduct(), o = findSale(id); if (!d || !o || o.v.annulation || linkedDelivery(id)) return;
@@ -1351,6 +1374,7 @@ var A = {
     if (S.payMode === 'cash') { pay = { mode: 'cash', cash: r2(t), bancontact: 0 }; msg += ' · À rendre : ' + money(Math.max(0, num(S.received) - t)); }
     else if (S.payMode === 'bc') pay = { mode: 'bancontact', cash: 0, bancontact: r2(t) };
     else { var c = num(S.mix); pay = { mode: 'mixte', cash: r2(c), bancontact: r2(t - c) }; }
+    if (S.after) { A.validateAfter(t, pay, msg); return; }
     var list = S.days[today()] || (S.days[today()] = []);
     var n = list.length + 1;
     list.push({
@@ -1658,6 +1682,7 @@ function vHist() {
     var an = v.annulation;
     html += '<div class="sale' + (an ? ' cancelled' : '') + '"><span class="h">' + v.horodatage.slice(11, 16) + '</span><div class="l">' + lines.map(function (x) { return '<span>' + x + '</span>'; }).join('') +
       (v.venteLiee ? (function () { var o = findSale(v.venteLiee); return '<span class="link">Livraison de la vente n° ' + esc(saleNum(v.venteLiee)) + (o ? ' (' + (o.date !== day ? frDate(o.date).slice(0, 5) + ' ' : '') + o.v.horodatage.slice(11, 16) + ')' : '') + '</span>'; })() : '') +
+      (v.livraisonAjoutee ? '<span class="link">Livraison ajoutée' + (v.livraisonAjoutee.horodatage.slice(0, 10) !== day ? ' le ' + frDate(v.livraisonAjoutee.horodatage).slice(0, 5) : '') + ' à ' + v.livraisonAjoutee.horodatage.slice(11, 16) + ' · ' + money(v.livraisonAjoutee.montant) + ' ' + (v.livraisonAjoutee.paiement.mode === 'cash' ? 'en cash' : v.livraisonAjoutee.paiement.mode === 'bancontact' ? 'par Bancontact' : 'en mixte') + '</span>' : '') +
       (!an && !v.venteLiee ? (function () { var ld = linkedDelivery(v.id); return ld ? '<span class="link">Livraison ajoutée' + (ld.date !== day ? ' le ' + frDate(ld.date).slice(0, 5) : '') + ' à ' + ld.v.horodatage.slice(11, 16) + ' (vente n° ' + esc(saleNum(ld.v.id)) + ')</span>' : ''; })() : '') +
       (an ? '<span class="annul">Annulée à ' + an.horodatage.slice(11, 16) + (an.horodatage.slice(0, 10) !== day ? ' le ' + frDate(an.horodatage) : '') + (an.motif ? ' · ' + esc(an.motif) : '') + '</span>' : '') +
       '</div><span class="pm">' + pay + '</span><span class="tt">' + money(v.total) + '</span>' +
@@ -1689,11 +1714,12 @@ function vAutoBar() {
 }
 function vAutoMini(sep) {
   var a = autoStatus(); if (!a) return '';
-  return sep + '<span data-a="openGh" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (a.ko ? 'var(--red)' : a.warn ? 'var(--amber)' : 'var(--faint)') + '">☁ ' + esc(a.court) + '</span>';
+  return sep + '<span data-a="openGh" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (a.ko ? 'var(--red)' : a.warn ? 'var(--amber)' : 'var(--faint)') + '">☁ ' + esc(PHONE ? a.court.replace('Envoi auto inactif', 'Envoi inactif').replace('En attente de réseau', 'Attente réseau') : a.court) + '</span>';
 }
 function vPrMini(sep) {
   if (!prConfigured()) return '';
   var s = PR_ST.state, txt = S.prBusy ? 'Impression…' : s === 'ok' ? 'Prête' : s === null ? 'Vérification…' : PR_ST.text;
+  if (PHONE) txt = txt.replace(/^Imprimante (injoignable|hors ligne|occupée).*$/, function (m, w) { return w.charAt(0).toUpperCase() + w.slice(1); }).replace(/^Erreur imprimante$/, 'Erreur').replace(/^Imprimante : /, '');
   return sep + '<span data-a="prCheckNow" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (s === 'ok' || s === null ? 'var(--faint)' : s === 'warn' ? 'var(--amber)' : 'var(--red)') + '">🖨 ' + esc(txt) + '</span>';
 }
 /* ---------- Écran « Réception de stock » ---------- */
@@ -1798,7 +1824,7 @@ function vPosPhone(d, p) {
     '<button class="iconbtn" data-a="toggleTheme" aria-label="' + (isDark() ? 'Mode clair' : 'Mode sombre') + '">' + (isDark() ? ICON_SUN : ICON_MOON) + '</button>' +
     '<button class="iconbtn" data-a="toggleMenu" aria-label="Menu">' + ICON_DOTS + '</button></div>' +
     '<div class="subbar"><div class="seg"><button class="' + (S.tab === 'caisse' ? 'on' : '') + '" data-a="tab" data-v="caisse">Caisse</button><button class="' + (S.tab === 'hist' ? 'on' : '') + '" data-a="tab" data-v="hist">Historique</button></div>' +
-    '<div class="place">' + ICON_PIN + '<span>' + esc(p ? p.nom : '') + '<br>' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + vAutoMini('<br>') + vPrMini(ghConfigured() ? ' · ' : '<br>') + '</span></div></div>' +
+    '<div class="place"><span>' + esc(p ? p.nom : '') + ' · ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + vAutoMini('<br>') + vPrMini('<br>') + '</span></div></div>' +
     vStorageBar() + (S.tab === 'caisse' ? vCaisse() : S.tab === 'gestion' ? vManage() : vHist()) + '</div>' +
     vMenu();
 }
@@ -1974,7 +2000,8 @@ function vGhRes() {
 
 function vTicket() {
   var l = S.lastSale || {};
-  return '<div class="overlay"><div class="modal" style="width:min(520px,96vw)"><h2>Vente enregistrée</h2>' +
+  return '<div class="overlay"><div class="modal" style="width:min(520px,96vw)"><h2>' + esc(l.titre || 'Vente enregistrée') + '</h2>' +
+    (l.rendu != null ? '<div class="result"><b>À rendre</b><span>' + money(l.rendu) + '</span></div>' : '') +
     (l.recu ? '<div class="result"><b>À rendre</b><span>' + money(Math.max(0, l.recu - (salesOf(l.date).filter(function (v) { return v.id === l.id; })[0] || { total: 0 }).total)) + '</span></div>' : '') +
     '<div style="font-size:19px;font-weight:700">Imprimer le ticket ?</div>' +
     '<div class="actions"><button class="btn" data-a="ticketNo" style="height:60px;min-width:120px">Non</button><button class="btn btn-primary" data-a="ticketYes" style="height:60px;min-width:160px">Imprimer</button></div></div></div>';
