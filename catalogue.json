@@ -1,9 +1,8 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 1,
-  "date": "2026-10-13",
-  "exemple": true,
+  "version": 2,
+  "date": "2026-11-19",
   "pointsDeVente": [
     {
       "id": "pdv1",
@@ -34,38 +33,31 @@
       "actif": true,
       "produits": [
         {
-          "id": "n1",
-          "libelle": "100–125 cm",
-          "prix": 39,
-          "ordre": 1,
-          "actif": true
-        },
-        {
           "id": "n2",
           "libelle": "125–150 cm",
           "prix": 49,
-          "ordre": 2,
+          "ordre": 1,
           "actif": true
         },
         {
           "id": "n3",
           "libelle": "150–175 cm",
           "prix": 59,
-          "ordre": 3,
+          "ordre": 2,
           "actif": true
         },
         {
           "id": "n4",
           "libelle": "175–200 cm",
           "prix": 69,
-          "ordre": 4,
+          "ordre": 3,
           "actif": true
         },
         {
           "id": "n5",
           "libelle": "200–250 cm",
           "prix": 89,
-          "ordre": 5,
+          "ordre": 4,
           "actif": true
         }
       ]
