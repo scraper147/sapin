@@ -93,6 +93,16 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - **Ticket** (proposition 1, à valider avec le gérant) : logo Agri-Garden en noir et blanc, activité, adresse (Rue de Soye, 6 – 5190 Spy) / téléphone / e-mail / TVA BE 0782.523.348 (bloc `TICKET` en haut du module « Ticket » dans `index.html` ; un champ vide n'est pas imprimé), n° de ticket, date, point de vente, articles (quantité × prix, remises), TOTAL en grand, nombre d'articles, paiement (cash reçu / rendu), conseil d'entretien du sapin, « Merci et joyeuses fêtes ! », « Ce ticket n'est pas une facture. ». 48 caractères par ligne, montants sans symbole (« EUR » au total).
 - **⋮ → Aperçu du ticket** (sans imprimante) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
 
+## Stock du stand (consultation)
+
+**⋮ → Stock du stand** : le restant de chaque article au stand de la tablette, calculé comme dans l'App admin : **livré + reçu − envoyé − vendu**.
+- Livré / reçu / envoyé : fichier de stock de la saison (`sapin/stock/`) : livraisons à ce stand, transferts vers ou depuis ce stand ; les réceptions encore en attente d'envoi sont comptées.
+- Vendu : fichiers de ventes de ce stand dans le dépôt des ventes, depuis le premier mouvement de la saison ; ventes annulées et articles libres ignorés ; pour un même jour, le fichier le plus récent compte (une tablette par stand). Les ventes de la tablette sont prises dans sa mémoire : le restant baisse **dès la vente**, même hors ligne.
+- Touchez un article pour le détail (Livré, Reçu, Envoyé, Vendu). 0 ou moins : rouge ; 3 ou moins : orange (`STOCK_BAS`). Bouton **Actualiser**.
+- Calcul automatique au démarrage, au retour du réseau, toutes les 15 minutes et à l'ouverture de l'écran (un appel pour la liste des fichiers, puis seulement les fichiers de ventes nouveaux ou modifiés de ce stand). Hors ligne : dernier calcul + ventes de la tablette faites depuis.
+- **Sur les tuiles de la caisse** : « reste N » entre le nom et le prix (`AFFICHER_RESTE = true` en haut du module « Stock du stand » ; false pour le masquer). Rien n'est affiché tant que le stock n'a jamais été calculé.
+- Consultation seulement : les corrections se font dans l'App admin. Mémoire : clé `agrigarden-caisse-stockcalc` (résumés des fichiers de ventes du stand).
+
 ## Réception de stock (transferts vers le stand de la tablette)
 
 **⋮ → Réception de stock** : encoder des articles arrivés d'un autre stand (par exemple Spy → Meux). Le stock de la saison est géré par l'**App admin** (Gestion sapin › Stock) ; la caisse ajoute seulement ses transferts dans le même fichier.
@@ -123,7 +133,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v18';` → `'v19'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v19';` → `'v20'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 

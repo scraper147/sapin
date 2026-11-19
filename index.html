@@ -321,12 +321,24 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .phone .rcfoot .btn{width:100%}
 .phone .rcrow input{width:84px}
 .rcrow input::placeholder{color:var(--line2);font-weight:400}
+.prod .rest{font-size:14px;font-weight:700;color:var(--muted);line-height:1}
+.prod .rest.warn{color:var(--warn-text)}
+.prod .rest.ko{color:var(--red)}
+.phone .prod .rest{font-size:12px}
+.skrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:52px;padding:8px 0;border:none;border-bottom:1px solid var(--soft);background:transparent;text-align:left;color:var(--text);font-size:17px}
+.skrow .skl{min-width:0;overflow-wrap:anywhere}
+.skrow .skn{font-size:22px;font-weight:800;flex-shrink:0}
+.skn.warn{color:var(--warn-text)}
+.skn.ko{color:var(--red)}
+.skrow.open{border-bottom:none}
+.skdet{display:flex;flex-wrap:wrap;gap:6px 18px;padding:0 0 10px;border-bottom:1px solid var(--soft);font-size:15px;color:var(--muted)}
+.skdet b{color:var(--text)}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v18'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v19'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -741,6 +753,7 @@ function stkTakeRecus(d) {
         lignes: Object.keys(x.m.lignes || {}).map(function (pid) { var a = stkArticle(pid); return { id: pid, q: x.m.lignes[pid], libelle: (a && a.libelle) || (arts[pid] && arts[pid].libelle) || pid }; }) };
     });
   STK.lu = isoLocal(new Date()); STK.noSeason = false;
+  if (typeof stkcFromDoc === 'function' && STKC.at) { stkcFromDoc(d); saveStkc(); } // stock du stand : mouvements à jour
 }
 /* Applique une opération de la file ({op:'add', id, mv, noms} ou {op:'del', id}) : relecture, ajout ou retrait d'une seule clé, PUT avec le sha lu.
    409/422 : le fichier a changé entre-temps, on relit et on recommence (3 essais au plus). */
@@ -810,6 +823,146 @@ function stkPendingText() {
   return n + ' mouvement' + (n > 1 ? 's' : '') + ' de stock';
 }
 S.rq = {};
+
+/* ---------- Stock du stand (lecture seule) ----------
+   Même calcul que l'App admin (Gestion sapin › Stock) : restant = livré + reçu − envoyé − vendu, par article.
+   - livré / reçu / envoyé : fichier de stock de la saison (livraisons dont stand = ce stand, transferts vers / depuis ce stand) ;
+   - vendu : fichiers de ventes de la Caisse Sapins (<GH_DOSSIER>/*.json hors stock/) de ce stand, depuis le premier mouvement
+     de la saison ; ventes annulées et articles libres ignorés ; pour un même stand et un même jour, le fichier dont
+     miseAJour est le plus récent compte (une tablette par stand).
+   Les ventes de cette tablette sont lues dans sa mémoire : le stock suit les ventes en direct, même hors ligne.
+   Les réceptions encore en file d'attente sont comptées aussi. */
+var STOCK_BAS = 3;            // « reste » en orange à partir de ce nombre (0 ou moins : rouge)
+var AFFICHER_RESTE = true;    // restant affiché sur les tuiles de la caisse
+var STKC_KEY = STORE_KEY + '-stockcalc';
+var STKC = { at: null, saison: null, start: null, place: null, mv: null, arts: {}, sums: {}, err: null, loading: false, noSeason: false };
+try { var stkcSaved = JSON.parse(localStorage.getItem(STKC_KEY) || 'null'); if (stkcSaved) ['at', 'saison', 'start', 'place', 'mv', 'arts', 'sums'].forEach(function (k) { if (stkcSaved[k] !== undefined) STKC[k] = stkcSaved[k]; }); } catch (e) {}
+function saveStkc() { try { localStorage.setItem(STKC_KEY, JSON.stringify({ at: STKC.at, saison: STKC.saison, start: STKC.start, place: STKC.place, mv: STKC.mv, arts: STKC.arts, sums: STKC.sums })); return true; } catch (e) { return false; } }
+/* Mouvements du fichier de stock → { pid: {liv, inn, out} } pour ce stand + date de début de saison */
+function stkcFromDoc(d) {
+  var mv = {}, start = null, arts = {};
+  function add(pid, k, q) { q = Number(q) || 0; if (!q) return; (mv[pid] = mv[pid] || { liv: 0, inn: 0, out: 0 })[k] += q; }
+  var all = d.mouvements || {};
+  Object.keys(all).forEach(function (id) {
+    var m = all[id]; if (!m || !m.lignes) return;
+    if (m.date && (!start || m.date < start)) start = m.date;
+    Object.keys(m.lignes).forEach(function (pid) {
+      if (m.type === 'livraison' && m.stand === S.placeId) add(pid, 'liv', m.lignes[pid]);
+      else if (m.type === 'transfert' && m.vers === S.placeId) add(pid, 'inn', m.lignes[pid]);
+      else if (m.type === 'transfert' && m.de === S.placeId) add(pid, 'out', m.lignes[pid]);
+    });
+  });
+  Object.keys(d.articles || {}).forEach(function (pid) { arts[pid] = d.articles[pid].libelle || pid; });
+  STKC.mv = mv; STKC.start = start; STKC.arts = arts; STKC.place = S.placeId; STKC.saison = d.nom || d.id || '';
+  STKC.noSeason = false;
+}
+/* Résumé d'un fichier de ventes : { pdv, date, maj, q: {pid: quantité} } */
+function salesSummary(f) {
+  var q = {};
+  (f.ventes || []).forEach(function (v) {
+    if (v.annulation) return;
+    (v.lignes || []).forEach(function (l) { if (l.produitId) q[l.produitId] = (q[l.produitId] || 0) + (Number(l.quantite) || 0); });
+  });
+  return { pdv: f.pointDeVente ? f.pointDeVente.id : null, date: f.date || null, maj: f.miseAJour || '', q: q };
+}
+/* Lecture des ventes du stand sur GitHub (un appel pour la liste, puis seulement les fichiers nouveaux ou modifiés) */
+async function stkcLoadSales() {
+  var r = await ghApi('GET', '/repos/' + GH_REPO + '/git/trees/HEAD?recursive=1', GH.token);
+  if (!r.ok) throw r.status;
+  var tree = (await r.json()).tree || [], pre = GH_DOSSIER + '/', keep = {}, mine = slug(S.placeId).slice(0, 12);
+  var files = tree.filter(function (t) { return t.type === 'blob' && t.path.indexOf(pre) === 0 && t.path.indexOf(pre + 'stock/') !== 0 && /\.json$/i.test(t.path); });
+  for (var i = 0; i < files.length; i++) {
+    var t = files[i], name = t.path.split('/').pop(), m = /^(\d{4}-\d{2}-\d{2})_([^_]+)_/.exec(name);
+    if (m && m[2] !== mine) continue;                    // autre stand (identifiant dans le nom du fichier) : pas lu
+    if (m && STKC.start && m[1] < STKC.start) continue;  // avant la saison
+    keep[t.sha] = true;
+    if (STKC.sums[t.sha]) continue;                      // déjà résumé (même contenu)
+    var b = await ghApi('GET', '/repos/' + GH_REPO + '/git/blobs/' + t.sha, GH.token);
+    if (!b.ok) throw b.status;
+    var s = null;
+    try { var f = JSON.parse(b64utf8d((await b.json()).content)); if (f && f.format === 'agri-garden-caisse/ventes') s = salesSummary(f); } catch (e) {}
+    STKC.sums[t.sha] = s && s.pdv === S.placeId ? s : { autre: true };
+  }
+  Object.keys(STKC.sums).forEach(function (sha) { if (!keep[sha]) delete STKC.sums[sha]; }); // fichiers disparus ou remplacés
+}
+async function stkcRefresh(manual) {
+  if (STKC.loading || !S.placeId) return;
+  if (!ghReady() || navigator.onLine === false) { if (manual) toast(!ghReady() ? 'Déverrouillez l’envoi GitHub pour calculer le stock' : 'Pas de réseau : stock du dernier calcul'); return; }
+  if (STKC.place && STKC.place !== S.placeId) { STKC.sums = {}; STKC.mv = null; } // point de vente changé
+  STKC.loading = true; render();
+  try {
+    var f = await stkSeason();
+    if (!f) { STKC.noSeason = true; STKC.mv = null; STKC.at = null; STKC.err = null; saveStkc(); return; }
+    stkcFromDoc(f.data);
+    if (typeof stkTakeRecus === 'function') { stkTakeRecus(f.data); saveStk(); }
+    await stkcLoadSales();
+    STKC.at = isoLocal(new Date()); STKC.err = null; saveStkc();
+  } catch (e) { var c = stkCode(e); if (c === 401) { delete GH.token; saveGh(); } STKC.err = c; }
+  finally { STKC.loading = false; render(); }
+}
+/* Restant par article : { pid: {liv, inn, out, sold, rest} } (null si jamais calculé pour ce stand) */
+function stockOfPlace() {
+  if (!STKC.mv || STKC.place !== S.placeId) return null;
+  var res = {};
+  function row(pid) { return res[pid] = res[pid] || { liv: 0, inn: 0, out: 0, sold: 0, rest: 0 }; }
+  Object.keys(STKC.mv).forEach(function (pid) { var a = row(pid), m = STKC.mv[pid]; a.liv = m.liv; a.inn = m.inn; a.out = m.out; });
+  // réceptions encore en attente d'envoi
+  STK.queue.forEach(function (o) {
+    if (o.op === 'add' && o.mv.vers === S.placeId) Object.keys(o.mv.lignes).forEach(function (pid) { row(pid).inn += o.mv.lignes[pid]; });
+  });
+  // ventes : par jour, le fichier le plus récent (GitHub ou mémoire de la tablette)
+  var best = {};
+  Object.keys(STKC.sums).forEach(function (sha) { var s = STKC.sums[sha]; if (s && !s.autre && s.date && (!best[s.date] || s.maj > best[s.date].maj)) best[s.date] = s; });
+  Object.keys(S.days).forEach(function (d) {
+    var pl = placeOf(d); if (!pl || pl.id !== S.placeId || !(S.days[d] || []).length) return;
+    var s = salesSummary(dayFile(d));
+    if (!best[d] || s.maj >= best[d].maj) best[d] = s;
+  });
+  Object.keys(best).forEach(function (d) {
+    if (STKC.start && d < STKC.start) return;
+    var q = best[d].q; Object.keys(q).forEach(function (pid) { row(pid).sold += q[pid]; });
+  });
+  Object.keys(res).forEach(function (pid) { var a = res[pid]; a.rest = a.liv + a.inn - a.out - a.sold; });
+  return res;
+}
+function restCls(n) { return n <= 0 ? 'ko' : n <= STOCK_BAS ? 'warn' : ''; }
+function vRest(st, pid) {
+  if (!AFFICHER_RESTE || !st) return '';
+  var a = st[pid], n = a ? a.rest : 0;
+  return '<span class="rest ' + restCls(n) + '">reste ' + n + '</span>';
+}
+function vStock() {
+  var pl = findPlace(S.placeId), st = stockOfPlace();
+  var head = '<div class="row"><h2>Stock du stand</h2><button class="btn" data-a="close">Fermer</button></div>';
+  var stat = STKC.loading ? { cls: '', t: 'Calcul du stock…' }
+    : STKC.noSeason ? { cls: 'ko', t: stkErrText('nosaison') }
+    : STKC.err != null ? { cls: 'warn', t: stkErrText(STKC.err) + (STKC.at ? ' · affichage du dernier calcul' : '') }
+    : !STKC.at ? { cls: 'warn', t: ghReady() ? 'Pas encore calculé : il faut internet.' : 'Déverrouillez l’envoi GitHub (bandeau ☁ de l’accueil) pour calculer le stock.' }
+    : navigator.onLine === false ? { cls: 'warn', t: 'Hors ligne · calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) + ', ventes de la tablette ajoutées depuis' }
+    : { cls: 'ok', t: 'Calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) + ' · ventes de la tablette en direct' };
+  var body = '';
+  if (st) {
+    var seen = {};
+    function line(pid, label) {
+      seen[pid] = true;
+      var a = st[pid] || { liv: 0, inn: 0, out: 0, sold: 0, rest: 0 }, open = S.stkOpen === pid;
+      return '<button class="skrow' + (open ? ' open' : '') + '" data-a="stkOpen" data-v="' + esc(pid) + '"><span class="skl">' + esc(label) + '</span><span class="skn ' + restCls(a.rest) + '">' + a.rest + '</span></button>' +
+        (open ? '<div class="skdet"><span>Livré <b>' + a.liv + '</b></span><span>Reçu <b>' + a.inn + '</b></span><span>Envoyé <b>' + a.out + '</b></span><span>Vendu <b>' + a.sold + '</b></span></div>' : '');
+    }
+    body = CATALOGUE.categories.map(function (k) {
+      return '<div class="rccat">' + esc(k.nom) + '</div>' + k.produits.map(function (p) { return line(p.id, p.libelle); }).join('');
+    }).join('');
+    var old = Object.keys(st).filter(function (pid) { return !seen[pid] && st[pid].rest !== 0; });
+    if (old.length) body += '<div class="rccat">Plus dans le catalogue</div>' + old.map(function (pid) { return line(pid, STKC.arts[pid] || pid); }).join('');
+  } else body = '<div class="empty" style="padding:20px">Le stock apparaîtra après le premier calcul.</div>';
+  return '<div class="overlay"><div class="modal rcmodal" data-keep="stk">' + head +
+    '<div class="sub">Restant à <strong>' + esc(pl ? pl.nom : '') + '</strong>' + (STKC.saison ? ' · ' + esc(STKC.saison) : '') + ' = livré + reçu − envoyé − vendu. Touchez un article pour le détail.</div>' +
+    '<div class="rcstat ' + stat.cls + '">' + esc(stat.t) + '</div>' +
+    '<div class="actions" style="justify-content:flex-start"><button class="btn" data-a="stkRefresh"' + (STKC.loading ? ' disabled' : '') + '>Actualiser</button></div>' +
+    '<div class="rclist">' + body + '</div>' +
+    '<div class="sub">Consultation seulement : les livraisons, transferts et corrections se font dans l’App admin (les réceptions, aussi ici : ⋮ → Réception de stock).</div>' +
+    '</div></div>';
+}
 
 /* ---------- Imprimante de tickets et tiroir-caisse (Epson TM-m30III, service ePOS-Print) ----------
    La caisse envoie les ordres en HTTPS à l'imprimante (même réseau Wi-Fi que la tablette). Le tiroir-caisse est branché
@@ -1202,6 +1355,9 @@ var A = {
   tkSel: function (id) { S.tkId = id; },
   tkDup: function (v) { S.tkDup = v === '1'; },
   tkPrint: function () { var v = tkPrevSale(); if (!v || v.exemple) return; S.modal = null; printSale(S.tkDay, v.id, { duplicata: true }); },
+  stkShow: function () { S.menu = false; S.cartOpen = false; S.modal = 'stock'; S.stkOpen = null; stkcRefresh(false); },
+  stkOpen: function (pid) { S.stkOpen = S.stkOpen === pid ? null : pid; },
+  stkRefresh: function () { stkcRefresh(true); },
   rcOpen: function () { S.menu = false; S.cartOpen = false; S.modal = 'reception'; S.rcStep = null; S.rq = {}; S.rcDate = today(); S.rcMsg = null; S.rcDel = null; stkRefresh(); },
   rcDe: function (id) { S.rcDe = id; S.rcMsg = null; },
   rcAsk: function () {
@@ -1404,9 +1560,9 @@ function vCaisse() {
     CATS.map(function (c) { return '<button class="cat' + (c.id === cat.id ? ' on' : '') + '" data-a="cat" data-v="' + c.id + '">' + esc(c.nom) + '</button>'; }).join('') +
     '<button class="free" data-a="openFree">+ Article libre</button></div><div class="products">' +
     (CATS.length ? '' : '<div class="emptycat">Aucun article actif. ' + (GESTION_CATALOGUE ? 'Réactivez-en dans <strong>⋮ → Gérer le catalogue</strong>.' : 'Le catalogue doit être complété dans l\u2019app Admin.') + '</div>') +
-    cat.produits.map(function (p) {
-      return '<button class="prod" data-a="add" data-v="' + p.id + '"><div style="display:flex;flex-direction:column;gap:2px"><span class="m">' + esc(p.libelle) + '</span><span class="s">' + esc(cat.nom) + '</span></div><span class="p">' + money(p.prix) + '</span></button>';
-    }).join('') + '</div></div>';
+    (function () { var st = stockOfPlace(); return cat.produits.map(function (p) {
+      return '<button class="prod" data-a="add" data-v="' + p.id + '"><div style="display:flex;flex-direction:column;gap:2px"><span class="m">' + esc(p.libelle) + '</span><span class="s">' + esc(cat.nom) + '</span></div>' + vRest(st, p.id) + '<span class="p">' + money(p.prix) + '</span></button>';
+    }).join(''); })() + '</div></div>';
 
   if (PHONE && S.cart.length && !S.cartOpen) {
     var nb = S.cart.reduce(function (a, l) { return a + l.qty; }, 0);
@@ -1468,6 +1624,7 @@ var MI = {
   drawer: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="9" rx="2"/><path d="M5 11V6h14v5M10 15.5h4"/></svg>',
   receipt: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
   box: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>'
 };
 /* Bandeau ☁ de l'accueil et mention de l'en-tête : état de l'envoi automatique (toucher = fenêtre GitHub) */
@@ -1569,6 +1726,7 @@ function vMenu() {
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
     tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
     (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '') +
+    (ghConfigured() ? tile('stkShow', MI.chart, 'Stock du stand', STKC.at && STKC.place === S.placeId ? 'Calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) : 'Restant par article') : '') +
     (ghConfigured() ? tile('rcOpen', MI.box, 'Réception de stock', STK.queue.length ? STK.queue.length + ' en attente d\u2019envoi' : 'Articles venus d\u2019un autre stand') : '') +
     (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
   var catalogue = (OPTIONS.ajoutArticles ? tile('openAddCat', MI.plus, 'Ajouter un article', 'Au catalogue de cet appareil') : '') +
@@ -1920,6 +2078,7 @@ function render() {
   else if (S.modal === 'drawer') html += vDrawer();
   else if (S.modal === 'prerr') html += vPrErr();
   else if (S.modal === 'reception') html += vReception();
+  else if (S.modal === 'stock') html += vStock();
   if (S.toast) html += '<div class="toast">' + esc(S.toast) + '</div>';
   app.innerHTML = html;
   app.querySelectorAll('[data-keep]').forEach(function (el) { if (keep[el.dataset.keep]) el.scrollTop = keep[el.dataset.keep]; });
@@ -1981,6 +2140,10 @@ render();
 loadSiteCatalogue(false);
 autoSchedule(5000);
 if (prConfigured()) setTimeout(prCheck, 1500);
+// Stock du stand : calcul au démarrage, au retour du réseau et toutes les 15 minutes (lecture seule, sans message)
+setTimeout(function () { stkcRefresh(false); }, 4000);
+window.addEventListener('online', function () { setTimeout(function () { stkcRefresh(false); }, 3000); });
+setInterval(function () { stkcRefresh(false); }, 15 * 60000);
 // Stockage protégé : Chrome n'efface pas ces données de lui-même
 if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
 // Fonctionnement hors ligne
