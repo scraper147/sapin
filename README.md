@@ -48,7 +48,7 @@ Le catalogue (points de vente, catégories, articles, prix) est **géré et publ
 
 ## Articles du catalogue
 
-La caisse sapins n'ajoute pas d'articles depuis l'app (`OPTIONS.ajoutArticles = false`) : les articles viennent uniquement du catalogue publié par l'app Admin. Le menu « Gérer le catalogue » est retiré (`GESTION_CATALOGUE = false` en haut du script) : pas de désactivation d'article ni de prix modifié sur une tablette, les réglages faits auparavant sur un appareil sont ignorés. Pour retirer un article ou changer un prix : app Admin, puis publier le catalogue.
+Les articles viennent uniquement du catalogue publié par l'app Admin. Pas d'ajout d'article, de désactivation ni de prix modifié sur une tablette (code retiré en v25 ; les anciens réglages des versions v9-v12 sont effacés de la mémoire de l'appareil). Pour retirer un article ou changer un prix : app Admin, puis publier le catalogue.
 
 ## Envoi des ventes sur GitHub (automatique)
 
@@ -114,6 +114,19 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - En dessous : les transferts reçus par ce stand pendant la saison (Admin ou caisse). Une tablette peut **supprimer** un transfert qu'elle a créé elle-même (relecture, suppression de la clé, PUT avec `sha`) ; les autres corrections se font dans l'App admin.
 - Mémoire de la tablette : seulement la file d'attente et les 60 derniers transferts reçus (clé `agrigarden-caisse-stock`).
 
+## Caisse du jour : fond de caisse, retraits, comptage
+
+**⋮ → Caisse du jour** (la tuile rappelle « Fond de caisse à saisir », l'argent attendu, ou l'écart du comptage).
+- **Fond de caisse** : demandé à la première ouverture de la caisse de la journée (« Plus tard » possible ; à saisir ensuite dans Caisse du jour). Montant total ou détail **billets et pièces**. Proposé automatiquement : le montant « laissé en caisse pour demain » au dernier comptage. Le tiroir s'ouvre pour y mettre l'argent.
+- **Retrait** (− Retrait : dépôt au coffre, remboursement client, dépense, autre) et **apport** (+ Apport : ajout de monnaie, autre) en cours de journée : montant + motif obligatoire ; le tiroir s'ouvre (journal du tiroir : « Retrait : Dépôt au coffre »…). Un retrait ou apport encodé par erreur peut être supprimé.
+- **Attendu en caisse** = fond + ventes payées en cash ce jour-là + apports − retraits. Les ventes annulées ne comptent pas ; la part cash d'une livraison ajoutée après coup compte le jour où elle est encaissée. Le Bancontact du jour est rappelé (hors tiroir).
+- **Compter la caisse** (fin de journée, ou à tout moment) : le tiroir s'ouvre ; saisie par billets et pièces (Entrée = ligne suivante) ou montant total ; compté, attendu et **écart** en direct (vert si juste, rouge sinon) ; « Laisser en caisse pour demain » (facultatif) devient le fond proposé le lendemain. On peut recompter : le dernier comptage fait foi.
+- **Compter le lendemain** (deux possibilités) :
+  - *Avec le fond du matin* : si la dernière journée n'a pas été comptée, la fenêtre « Fond de caisse » le signale et propose (coché par défaut) « Compter aussi comme fin de journée du jj/mm » : le montant saisi devient le comptage de cette journée (écart calculé) et le fond du jour. À décocher si quelqu'un a touché au tiroir depuis la fermeture.
+  - *Choix du jour* : en haut de **Caisse du jour**, les jours gardés sur la tablette (« à compter » en rouge s'ils ne sont pas comptés). Pour un jour passé : fond, retraits / apports, comptage et rapport après coup (le tiroir ne s'ouvre pas ; l'heure réelle est notée, « Compté le 19/11 à 08:10 »).
+- **Rapport de caisse** : aperçu dans Caisse du jour, et **Imprimer le rapport** si une imprimante est configurée (ventes, cash / Bancontact, fond, retraits et apports, attendu, compté, écart, détail du comptage, ouvertures du tiroir sans vente).
+- Tout est enregistré dans le fichier du jour (champ `caisse` : fondDeCaisse, ventesCash, apports, retraits, attendu, compte, ecart, laissePourDemain, et le détail) et envoyé sur GitHub avec les ventes.
+
 ## Livraison
 
 Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) **dans le panier, à côté de « Remise ticket »** (toujours au même endroit, quelle que soit la largeur de l'écran ; sur smartphone, dans l'écran du panier) : ajoute les frais de livraison au panier, **une seule fois par vente** (ensuite le bouton affiche « Livraison ajoutée » et le « + » de la ligne est désactivé ; « − » la retire).
@@ -142,7 +155,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v24';` → `'v25'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v27';` → `'v28'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
