@@ -114,6 +114,14 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - En dessous : les transferts reçus par ce stand pendant la saison (Admin ou caisse). Une tablette peut **supprimer** un transfert qu'elle a créé elle-même (relecture, suppression de la clé, PUT avec `sha`) ; les autres corrections se font dans l'App admin.
 - Mémoire de la tablette : seulement la file d'attente et les 60 derniers transferts reçus (clé `agrigarden-caisse-stock`).
 
+## Livraison
+
+Bouton **+ Livraison · <prix>** à côté de **+ Article libre** : ajoute les frais de livraison au panier, **une seule fois par vente** (ensuite le bouton affiche « ✓ Livraison » et le « + » de la ligne est désactivé ; « − » la retire).
+- Le prix vient du **catalogue** : un article dont le libellé est **« Livraison »** (ou « Frais de livraison »), dans n'importe quelle catégorie. Conseil : dans l'App admin, une catégorie « Services » (sans nom de catégorie devant le libellé) avec l'article « Livraison » et son prix, puis publier le catalogue.
+- Cet article n'apparaît pas dans les tuiles, ni dans le stock, ni dans la réception de stock. Une catégorie qui ne contient que lui n'a pas d'onglet.
+- Sans cet article dans le catalogue, le bouton n'est pas affiché.
+- Dans la vente et le fichier du jour, c'est une ligne normale (produitId de l'article, quantité 1) : elle figure sur le ticket et dans les totaux.
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -133,7 +141,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v19';` → `'v20'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v20';` → `'v21'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 

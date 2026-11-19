@@ -333,12 +333,14 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .skrow.open{border-bottom:none}
 .skdet{display:flex;flex-wrap:wrap;gap:6px 18px;padding:0 0 10px;border-bottom:1px solid var(--soft);font-size:15px;color:var(--muted)}
 .skdet b{color:var(--text)}
+.free.deliv{margin-left:0}
+.free.deliv.done{border-style:solid;border-color:var(--line2);color:var(--muted)}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v19'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v20'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -395,9 +397,19 @@ function saveHid() {
   try { localStorage.setItem(HID_KEY, JSON.stringify(HID)); refreshUsage(); return true; }
   catch (e) { S.modal = 'storage'; refreshUsage(); return false; }
 }
+/* Livraison : article du catalogue dont le libellé est « Livraison » (ou « Frais de livraison »), dans n'importe quelle
+   catégorie (par exemple une catégorie « Services »). Il n'apparaît pas dans les tuiles : bouton « Livraison » à côté de
+   « + Article libre », une seule fois par vente. Sans cet article dans le catalogue, le bouton est masqué. */
+function isDeliveryLabel(t) { var s = slug(t); return s === 'livraison' || s === 'frais-de-livraison'; }
+function deliveryProduct() {
+  var r = null;
+  if (CATALOGUE) CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { if (!r && isDeliveryLabel(p.libelle)) r = { p: p, cat: k }; }); });
+  return r;
+}
+function isDeliveryId(pid) { var d = deliveryProduct(); return !!(d && pid && d.p.id === pid); }
 function visibleCats() {
   return CATALOGUE.categories.map(function (k) {
-    return Object.assign({}, k, { produits: k.produits.filter(function (p) { return !HID[p.id]; }) });
+    return Object.assign({}, k, { produits: k.produits.filter(function (p) { return !HID[p.id] && !isDeliveryLabel(p.libelle); }) });
   }).filter(function (k) { return k.produits.length; });
 }
 
@@ -950,9 +962,10 @@ function vStock() {
         (open ? '<div class="skdet"><span>Livré <b>' + a.liv + '</b></span><span>Reçu <b>' + a.inn + '</b></span><span>Envoyé <b>' + a.out + '</b></span><span>Vendu <b>' + a.sold + '</b></span></div>' : '');
     }
     body = CATALOGUE.categories.map(function (k) {
-      return '<div class="rccat">' + esc(k.nom) + '</div>' + k.produits.map(function (p) { return line(p.id, p.libelle); }).join('');
+      var prods = k.produits.filter(function (p) { return !isDeliveryLabel(p.libelle); }); if (!prods.length) return '';
+      return '<div class="rccat">' + esc(k.nom) + '</div>' + prods.map(function (p) { return line(p.id, p.libelle); }).join('');
     }).join('');
-    var old = Object.keys(st).filter(function (pid) { return !seen[pid] && st[pid].rest !== 0; });
+    var old = Object.keys(st).filter(function (pid) { return !seen[pid] && !isDeliveryId(pid) && st[pid].rest !== 0; });
     if (old.length) body += '<div class="rccat">Plus dans le catalogue</div>' + old.map(function (pid) { return line(pid, STKC.arts[pid] || pid); }).join('');
   } else body = '<div class="empty" style="padding:20px">Le stock apparaîtra après le premier calcul.</div>';
   return '<div class="overlay"><div class="modal rcmodal" data-keep="stk">' + head +
@@ -1212,7 +1225,12 @@ var A = {
     if (i >= 0) S.cart[i].qty++;
     else S.cart.push({ produitId: pid, categorie: c.nom, name: c.prefixe ? c.nom + ' ' + it.libelle : it.libelle, price: it.prix, qty: 1, disc: null });
   },
-  inc: function (i) { S.cart[+i].qty++; },
+  addDelivery: function () {
+    var d = deliveryProduct(); if (!d) return;
+    if (S.cart.some(function (l) { return l.produitId === d.p.id; })) { toast('La livraison est déjà dans la vente'); return; }
+    S.cart.push({ produitId: d.p.id, categorie: d.cat.nom, name: d.cat.prefixe ? d.cat.nom + ' ' + d.p.libelle : d.p.libelle, price: d.p.prix, qty: 1, disc: null });
+  },
+  inc: function (i) { var l = S.cart[+i]; if (isDeliveryId(l.produitId)) { toast('La livraison ne compte qu\u2019une fois par vente'); return; } l.qty++; },
   dec: function (i) { i = +i; if (--S.cart[i].qty <= 0) S.cart.splice(i, 1); if (!S.cart.length) S.ticketDisc = null; },
   clear: function () { S.cart = []; S.ticketDisc = null; },
   openFree: function () { S.modal = 'free'; S.freeLabel = ''; S.freePrice = ''; },
@@ -1558,7 +1576,11 @@ function vCaisse() {
   var cat = CATS.filter(function (c) { return c.id === S.cat; })[0] || CATS[0] || { nom: '', produits: [] };
   var html = '<div class="body"><div class="catalog"><div class="cats">' +
     CATS.map(function (c) { return '<button class="cat' + (c.id === cat.id ? ' on' : '') + '" data-a="cat" data-v="' + c.id + '">' + esc(c.nom) + '</button>'; }).join('') +
-    '<button class="free" data-a="openFree">+ Article libre</button></div><div class="products">' +
+    '<button class="free" data-a="openFree">+ Article libre</button>' + (function () {
+      var d = deliveryProduct(); if (!d) return '';
+      var inCart = S.cart.some(function (l) { return l.produitId === d.p.id; });
+      return '<button class="free deliv' + (inCart ? ' done' : '') + '" data-a="addDelivery"' + (inCart ? ' disabled' : '') + '>' + (inCart ? '✓ Livraison' : '+ Livraison · ' + money(d.p.prix)) + '</button>';
+    })() + '</div><div class="products">' +
     (CATS.length ? '' : '<div class="emptycat">Aucun article actif. ' + (GESTION_CATALOGUE ? 'Réactivez-en dans <strong>⋮ → Gérer le catalogue</strong>.' : 'Le catalogue doit être complété dans l\u2019app Admin.') + '</div>') +
     (function () { var st = stockOfPlace(); return cat.produits.map(function (p) {
       return '<button class="prod" data-a="add" data-v="' + p.id + '"><div style="display:flex;flex-direction:column;gap:2px"><span class="m">' + esc(p.libelle) + '</span><span class="s">' + esc(cat.nom) + '</span></div>' + vRest(st, p.id) + '<span class="p">' + money(p.prix) + '</span></button>';
@@ -1573,7 +1595,7 @@ function vCaisse() {
   S.cart.forEach(function (l, i) {
     html += '<div class="line"><button class="info" data-a="lineDisc" data-v="' + i + '" aria-label="Remise sur cet article"><span class="n">' + esc(l.name) + '</span><span class="u">' + money(l.price) + ' / pièce</span>' +
       (l.disc ? '<span class="d">Remise ' + discText(l.disc) + '</span>' : '') + '</button>' +
-      '<div class="qty"><button data-a="dec" data-v="' + i + '" aria-label="Retirer un">−</button><span>' + l.qty + '</span><button data-a="inc" data-v="' + i + '" aria-label="Ajouter un">+</button></div>' +
+      '<div class="qty"><button data-a="dec" data-v="' + i + '" aria-label="Retirer un">−</button><span>' + l.qty + '</span><button data-a="inc" data-v="' + i + '" aria-label="Ajouter un"' + (isDeliveryId(l.produitId) ? ' disabled' : '') + '>+</button></div>' +
       '<span class="t">' + money(lineTotal(l)) + '</span></div>';
   });
   html += '</div><div class="cart-f">' +
@@ -1646,7 +1668,7 @@ function vPrMini(sep) {
 function rcLines() {
   var out = [];
   if (!CATALOGUE) return out;
-  CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { var q = parseInt(S.rq[p.id], 10); if (q > 0) out.push({ id: p.id, q: q, libelle: stkArticle(p.id).libelle }); }); });
+  CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { if (isDeliveryLabel(p.libelle)) return; var q = parseInt(S.rq[p.id], 10); if (q > 0) out.push({ id: p.id, q: q, libelle: stkArticle(p.id).libelle }); }); });
   return out;
 }
 function rcTotalText(l) {
@@ -1681,7 +1703,8 @@ function vReception() {
       '<div class="actions"><button class="btn" data-a="rcBack">Modifier</button><button class="btn btn-primary" data-a="rcSave">Confirmer la réception</button></div></div></div>';
   }
   var cats = CATALOGUE.categories.map(function (k) {
-    return '<div class="rccat">' + esc(k.nom) + '</div>' + k.produits.map(function (p) {
+    var prods = k.produits.filter(function (p) { return !isDeliveryLabel(p.libelle); }); if (!prods.length) return '';
+    return '<div class="rccat">' + esc(k.nom) + '</div>' + prods.map(function (p) {
       return '<label class="rcrow"><span>' + esc(p.libelle) + '</span><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0" data-f="rq:' + esc(p.id) + '" value="' + esc(S.rq[p.id] || '') + '"></label>';
     }).join('');
   }).join('');
