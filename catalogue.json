@@ -1,7 +1,7 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 5,
+  "version": 6,
   "date": "2026-11-19",
   "pointsDeVente": [
     {
@@ -33,38 +33,74 @@
       "actif": true,
       "produits": [
         {
-          "id": "nord-1",
-          "libelle": "100-125 cm",
-          "prix": 39,
-          "ordre": 1,
-          "actif": true
-        },
-        {
           "id": "n2",
           "libelle": "125–150 cm",
-          "prix": 49,
-          "ordre": 2,
+          "prix": 40,
+          "ordre": 1,
           "actif": true
         },
         {
           "id": "n3",
           "libelle": "150–175 cm",
-          "prix": 59,
-          "ordre": 3,
+          "prix": 50,
+          "ordre": 2,
           "actif": true
         },
         {
           "id": "n4",
           "libelle": "175–200 cm",
-          "prix": 69,
-          "ordre": 4,
+          "prix": 60,
+          "ordre": 3,
           "actif": true
         },
         {
           "id": "n5",
-          "libelle": "200–250 cm",
-          "prix": 89,
+          "libelle": "200–225 cm",
+          "prix": 70,
+          "ordre": 4,
+          "actif": true
+        },
+        {
+          "id": "nord-1",
+          "libelle": "225-250 cm",
+          "prix": 80,
           "ordre": 5,
+          "actif": true
+        },
+        {
+          "id": "nord-2",
+          "libelle": "250-300 cm",
+          "prix": 100,
+          "ordre": 6,
+          "actif": true
+        },
+        {
+          "id": "nord-3",
+          "libelle": "300-400 cm",
+          "prix": 120,
+          "ordre": 7,
+          "actif": true
+        }
+      ]
+    },
+    {
+      "id": "cat3",
+      "nom": "Fraseri",
+      "ordre": 2,
+      "actif": true,
+      "produits": [
+        {
+          "id": "cat3-1",
+          "libelle": "150-175 cm",
+          "prix": 55,
+          "ordre": 1,
+          "actif": true
+        },
+        {
+          "id": "cat3-2",
+          "libelle": "175-200 cm",
+          "prix": 60,
+          "ordre": 2,
           "actif": true
         }
       ]
@@ -72,20 +108,35 @@
     {
       "id": "epi",
       "nom": "Épicéa",
-      "ordre": 2,
+      "ordre": 3,
       "actif": true,
       "produits": [
         {
           "id": "e1",
-          "libelle": "100–150 cm",
-          "prix": 25,
+          "libelle": "Prix unitaire",
+          "prix": 30,
+          "ordre": 1,
+          "actif": true
+        }
+      ]
+    },
+    {
+      "id": "cat2",
+      "nom": "Sapins en motte",
+      "ordre": 4,
+      "actif": true,
+      "produits": [
+        {
+          "id": "cat2-1",
+          "libelle": "150-175 cm",
+          "prix": 65,
           "ordre": 1,
           "actif": true
         },
         {
-          "id": "e2",
-          "libelle": "150–200 cm",
-          "prix": 35,
+          "id": "cat2-2",
+          "libelle": "175-200 cm",
+          "prix": 75,
           "ordre": 2,
           "actif": true
         }
@@ -94,37 +145,23 @@
     {
       "id": "acc",
       "nom": "Accessoires",
-      "ordre": 3,
+      "ordre": 5,
       "actif": true,
       "prefixe": false,
       "produits": [
         {
           "id": "a1",
           "libelle": "Croix en bois",
-          "prix": 10,
+          "prix": 5,
           "ordre": 1,
           "actif": true
-        },
-        {
-          "id": "a2",
-          "libelle": "Demi-bûche",
-          "prix": 12,
-          "ordre": 2,
-          "actif": true
-        },
-        {
-          "id": "a3",
-          "libelle": "Pied métal",
-          "prix": 15,
-          "ordre": 3,
-          "actif": false
         }
       ]
     },
     {
       "id": "cat1",
       "nom": "Services",
-      "ordre": 4,
+      "ordre": 6,
       "actif": true,
       "produits": [
         {
