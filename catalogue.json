@@ -1,7 +1,7 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 4,
+  "version": 5,
   "date": "2026-11-19",
   "pointsDeVente": [
     {
@@ -118,6 +118,21 @@
           "prix": 15,
           "ordre": 3,
           "actif": false
+        }
+      ]
+    },
+    {
+      "id": "cat1",
+      "nom": "Services",
+      "ordre": 4,
+      "actif": true,
+      "produits": [
+        {
+          "id": "cat1-1",
+          "libelle": "Livraison",
+          "prix": 5,
+          "ordre": 1,
+          "actif": true
         }
       ]
     }
