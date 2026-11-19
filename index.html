@@ -242,7 +242,9 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .hdays{display:flex;flex-wrap:wrap;gap:6px}
 .hdays .choice{height:40px;padding:0 14px;font-size:15px}
 .hsum{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin-bottom:10px;font-size:17px}
-.sale{grid-template-columns:90px minmax(0,1fr) 200px 100px 190px !important}
+.sale{grid-template-columns:90px minmax(0,1fr) 170px 100px auto !important}
+.sale .act{flex-wrap:nowrap !important}
+.phone .sale .act{flex-wrap:wrap !important}
 .sale .act{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
 .sale .act .btn{height:42px;padding:0 14px;font-size:15px}
 .sale.cancelled .h,.sale.cancelled .l>span:not(.annul),.sale.cancelled .pm,.sale.cancelled .tt{opacity:.45;text-decoration:line-through}
@@ -338,12 +340,15 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .small.deliv svg{flex-shrink:0}
 .small.deliv:active{transform:translateY(1px);box-shadow:none}
 .small.deliv.done{border-color:var(--line2);background:var(--soft);color:var(--muted);box-shadow:none}
+.sale .link{color:var(--green);font-weight:700}
+.sale .act .hdeliv{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--green);background:var(--tint);color:var(--green);font-weight:800}
+.sale .act .hdeliv svg{flex-shrink:0}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v22'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v23'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -1117,6 +1122,7 @@ function ticketXml(v, opts) {
   var num = v.id.split('-').pop();
   t(tkLine('Ticket n° ' + num, frDate(v.horodatage) + ' ' + v.horodatage.slice(11, 16)));
   if (v.pointDeVente) t('Point de vente : ' + v.pointDeVente.nom);
+  if (v.venteLiee) { var lo = findSale(v.venteLiee); t('Livraison de la vente n° ' + saleNum(v.venteLiee) + (lo ? ' du ' + frDate(lo.date).slice(0, 5) : '')); }
   t(SEP2);
   var nb = 0;
   v.lignes.forEach(function (l) {
@@ -1228,6 +1234,13 @@ var A = {
     if (i >= 0) S.cart[i].qty++;
     else S.cart.push({ produitId: pid, categorie: c.nom, name: c.prefixe ? c.nom + ' ' + it.libelle : it.libelle, price: it.prix, qty: 1, disc: null });
   },
+  histDeliv: function (id) {
+    var d = deliveryProduct(), o = findSale(id); if (!d || !o || o.v.annulation || linkedDelivery(id)) return;
+    S.savedCart = { cart: S.cart, ticketDisc: S.ticketDisc };
+    S.cart = [{ produitId: d.p.id, categorie: d.cat.nom, name: d.cat.prefixe ? d.cat.nom + ' ' + d.p.libelle : d.p.libelle, price: d.p.prix, qty: 1, disc: null }];
+    S.ticketDisc = null; S.after = { id: id, date: o.date, heure: o.v.horodatage.slice(11, 16) };
+    A.openPay();
+  },
   addDelivery: function () {
     var d = deliveryProduct(); if (!d) return;
     if (S.cart.some(function (l) { return l.produitId === d.p.id; })) { toast('La livraison est déjà dans la vente'); return; }
@@ -1248,6 +1261,7 @@ var A = {
   },
   removeDisc: function () { if (S.discTarget === 'ticket') S.ticketDisc = null; else S.cart[S.discTarget].disc = null; S.modal = null; },
   close: function () { if (S.modal === 'pay' && S.payDrawer) { S.payDrawer = null; persist(); }
+    if (S.modal === 'pay' && S.after) restoreCart();
     S.modal = S.modal === 'ghcfg' && S.ghBack ? S.ghBack : null; S.ghBack = null; S.ghPending = null; S.storageMsg = ''; },
   checkCatalogue: function () { loadSiteCatalogue(true); },
   checkCatMenu: function () { S.menu = false; if (!S.catLoading) loadSiteCatalogue(true); },
@@ -1347,10 +1361,12 @@ var A = {
       sousTotal: r2(up5(subtotal())), remiseTicket: jsonDisc(S.ticketDisc), total: r2(t), paiement: pay
     });
     var sale = list[list.length - 1];
+    if (S.after) { sale.venteLiee = S.after.id; msg = msg.replace('Vente enregistrée', 'Livraison enregistrée'); }
     if (!S.payDrawer && pay.cash > 0) payDrawerOpen(); // montant tapé au clavier : ouverture à la validation
     if (S.payDrawer) { S.payDrawer.motif = pay.cash > 0 ? 'Vente' : 'Vente payée par Bancontact (tiroir ouvert pendant l\u2019encaissement)'; S.payDrawer.venteId = sale.id; S.payDrawer = null; }
     S.lastSale = { date: today(), id: sale.id, recu: S.payMode === 'cash' ? num(S.received) : 0, msg: msg };
     S.cart = []; S.ticketDisc = null; S.modal = null; S.cartOpen = false;
+    if (S.after) restoreCart(); // la vente en cours avant la livraison après coup est remise dans le panier
     if (!persist()) { S.storageMsg = msg.replace('Vente enregistrée', 'Vente NON enregistrée dans l\u2019appareil'); return; }
     if (prConfigured()) S.modal = 'ticket'; else toast(msg);
   },
@@ -1617,6 +1633,13 @@ function histDays() {
   if (ds.indexOf(t) < 0) ds.push(t);
   return ds.sort().reverse().slice(0, 7);
 }
+/* Livraison ajoutée après coup (Historique) : nouvelle vente « Livraison » liée à la vente d'origine (champ venteLiee),
+   encaissée avec le même écran d'encaissement (tiroir, ticket). La vente d'origine et son ticket ne changent pas. */
+function saleNum(id) { return String(id || '').split('-').pop(); }
+function findSale(id) { var r = null; Object.keys(S.days).forEach(function (d) { (S.days[d] || []).forEach(function (v) { if (v.id === id) r = { date: d, v: v }; }); }); return r; }
+function linkedDelivery(id) { var r = null; Object.keys(S.days).forEach(function (d) { (S.days[d] || []).forEach(function (v) { if (v.venteLiee === id && !v.annulation) r = { date: d, v: v }; }); }); return r; }
+function hasDeliveryLine(v) { return v.lignes.some(function (l) { return isDeliveryId(l.produitId) || isDeliveryLabel(l.libelle); }); }
+function restoreCart() { if (S.savedCart) { S.cart = S.savedCart.cart; S.ticketDisc = S.savedCart.ticketDisc; } S.savedCart = null; S.after = null; }
 function vHist() {
   var days = histDays(), day = days.indexOf(S.histDay) >= 0 ? S.histDay : today();
   var all = salesOf(day), ok = validSales(all), nAnn = all.length - ok.length;
@@ -1634,9 +1657,12 @@ function vHist() {
     var p = v.paiement, pay = p.mode === 'cash' ? 'Cash' : p.mode === 'bancontact' ? 'Bancontact' : 'Mixte · cash ' + money(p.cash) + ' + Bancontact ' + money(p.bancontact);
     var an = v.annulation;
     html += '<div class="sale' + (an ? ' cancelled' : '') + '"><span class="h">' + v.horodatage.slice(11, 16) + '</span><div class="l">' + lines.map(function (x) { return '<span>' + x + '</span>'; }).join('') +
+      (v.venteLiee ? (function () { var o = findSale(v.venteLiee); return '<span class="link">Livraison de la vente n° ' + esc(saleNum(v.venteLiee)) + (o ? ' (' + (o.date !== day ? frDate(o.date).slice(0, 5) + ' ' : '') + o.v.horodatage.slice(11, 16) + ')' : '') + '</span>'; })() : '') +
+      (!an && !v.venteLiee ? (function () { var ld = linkedDelivery(v.id); return ld ? '<span class="link">Livraison ajoutée' + (ld.date !== day ? ' le ' + frDate(ld.date).slice(0, 5) : '') + ' à ' + ld.v.horodatage.slice(11, 16) + ' (vente n° ' + esc(saleNum(ld.v.id)) + ')</span>' : ''; })() : '') +
       (an ? '<span class="annul">Annulée à ' + an.horodatage.slice(11, 16) + (an.horodatage.slice(0, 10) !== day ? ' le ' + frDate(an.horodatage) : '') + (an.motif ? ' · ' + esc(an.motif) : '') + '</span>' : '') +
       '</div><span class="pm">' + pay + '</span><span class="tt">' + money(v.total) + '</span>' +
       '<span class="act">' + (an ? '' : (prConfigured() ? '<button class="btn" data-a="reprint" data-v="' + esc(day + '|' + v.id) + '"' + (S.prBusy ? ' disabled' : '') + '>Ticket</button>' : '') +
+        (deliveryProduct() && !v.venteLiee && !hasDeliveryLine(v) && !linkedDelivery(v.id) ? '<button class="btn hdeliv" data-a="histDeliv" data-v="' + esc(v.id) + '">' + TRUCK + '<span>Livraison</span></button>' : '') +
         '<button class="btn btn-danger" data-a="askCancel" data-v="' + esc(day + '|' + v.id) + '">Annuler</button>') + '</span></div>';
   });
   return html + '</div></div>';
@@ -2009,7 +2035,7 @@ function vDisc() {
 function vPay() {
   var t = total(), rec = num(S.received), ch = rec - t, mixC = num(S.mix);
   var can = S.payMode === 'cash' ? rec >= t - 0.001 : S.payMode === 'mix' ? (mixC > 0 && mixC < t) : S.payMode === 'bc';
-  var html = '<div class="overlay"><div class="modal paymodal" style="width:min(660px,96vw)"><div class="row"><h2>Encaissement</h2><span style="font-size:40px;font-weight:800">' + money(t) + '</span></div>' +
+  var html = '<div class="overlay"><div class="modal paymodal" style="width:min(660px,96vw)"><div class="row"><h2>' + (S.after ? 'Livraison · vente n° ' + esc(saleNum(S.after.id)) + ' (' + (S.after.date !== today() ? frDate(S.after.date).slice(0, 5) + ' ' : '') + S.after.heure + ')' : 'Encaissement') + '</h2><span style="font-size:40px;font-weight:800">' + money(t) + '</span></div>' +
     '<div class="modes"><button class="mode' + (S.payMode === 'cash' ? ' on' : '') + '" data-a="mode" data-v="cash">Cash</button><button class="mode' + (S.payMode === 'bc' ? ' on' : '') + '" data-a="mode" data-v="bc">Bancontact</button><button class="mode' + (S.payMode === 'mix' ? ' on' : '') + '" data-a="mode" data-v="mix">Mixte</button></div>';
   function cashBody() {
     return '<div class="sub" style="font-weight:700">Billets reçus</div><div class="bills">' +

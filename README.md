@@ -121,6 +121,7 @@ Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) 
 - Cet article n'apparaît pas dans les tuiles, ni dans le stock, ni dans la réception de stock. Une catégorie qui ne contient que lui n'a pas d'onglet.
 - Sans cet article dans le catalogue, le bouton n'est pas affiché.
 - Dans la vente et le fichier du jour, c'est une ligne normale (produitId de l'article, quantité 1) : elle figure sur le ticket et dans les totaux.
+- **Livraison demandée après l'encaissement** (le client a déjà payé, puis le sapin ne rentre pas dans sa voiture) : onglet **Historique** → bouton **Livraison** sur la vente → l'écran d'encaissement s'ouvre pour le prix de la livraison (titre « Livraison · vente n° 0042 (14:32) »), avec les mêmes modes de paiement, le tiroir et la question du ticket. Une **nouvelle vente** « Livraison » est enregistrée aujourd'hui, liée à la vente d'origine (champ `venteLiee` dans le fichier du jour) ; la vente d'origine et son ticket ne changent pas. Le ticket de la livraison porte « Livraison de la vente n° 0042 du 05/12 ». Dans l'Historique : « Livraison ajoutée à 15:02 (vente n° 0043) » sous la vente d'origine, « Livraison de la vente n° 0042 » sous la livraison. Le bouton n'apparaît pas si la vente contient déjà une livraison ou en a déjà une liée (sauf si celle-ci est annulée). Une vente en cours dans le panier est mise de côté puis remise après l'encaissement de la livraison.
 
 ## Annuler une vente
 
@@ -141,7 +142,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v22';` → `'v23'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v23';` → `'v24'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
