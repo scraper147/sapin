@@ -340,7 +340,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v30'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v31'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -491,7 +491,7 @@ function dayFile(date) {
 
 var GH_REPO = 'scraper147/ventes';          // ex. 'scraper147/ventes' (dépôt privé dédié aux ventes) ; vide = fonction masquée
 var GH_DOSSIER = 'sapin';  // dossier de cette caisse dans le dépôt des ventes (ex. 'bar', 'sapin')
-var CLE_CHIFFREE = {"v":1,"kdf":"PBKDF2-SHA256","iter":600000,"salt":"kHwfHCML8CWZygnhH3r6dA==","iv":"1ZjD1BOwURkTUN0z","data":"oDMdS12pYygGPYMQtE0wEiVSMibJrGnCF7XAjbWdKaVVQG8hPEDh6x6QfYf0QpXh5jZbxJrIwTXDtb78J4biUSrQBUnH1RgaXI+lc6ZMBX4vgpr83ZYYCwEDEOWbVNoSJeK7afjX7DcV8eTUDg=="};   // clé chiffrée des caisses (app admin > Préparer la clé chiffrée) ; null = fonction masquée
+var CLE_CHIFFREE = {"v":1,"kdf":"PBKDF2-SHA256","iter":600000,"salt":"yR6vFZ33qDHHcgluD3Nmaw==","iv":"QudyDQe+UoKm3H+a","data":"zK5AQVEfQtweL6xhzwKVEv9RJL7s+ICJzaxN2lFCKuSQnRc3xvvUrTYZn1C89r3w2CojElqmdephvSU9DNTE3PzryJyYXm1m20aNcmZa4t6WutKvtOIWIa4BNdr5EIlwIL2FxyxkyVY0gVKCcg==","nom":"Clé de vente"};   // clé chiffrée des caisses (app admin > Préparer la clé chiffrée) ; null = fonction masquée
 var GH_KEY = STORE_KEY + '-github';
 var GH = {};
 try { GH = JSON.parse(localStorage.getItem(GH_KEY)) || {}; } catch (e) { GH = {}; }

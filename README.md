@@ -52,7 +52,7 @@ Les articles viennent uniquement du catalogue publié par l'app Admin. Pas d'ajo
 
 ## Envoi des ventes sur GitHub (automatique)
 
-**Configurée pour la caisse sapins** : dépôt privé `scraper147/ventes`, dossier `sapin/`, même clé chiffrée et même phrase de passe que les autres caisses (clé renouvelée le 03/11 après expiration de l'ancienne le 27/10 : chaque tablette doit être déverrouillée à nouveau).
+**Configurée pour la caisse sapins** : dépôt privé `scraper147/ventes`, dossier `sapin/`, même clé chiffrée et même phrase de passe que les autres caisses (clé renouvelée le 19/11, « Clé de vente », v31 : chaque tablette doit être déverrouillée avec la nouvelle phrase de passe si l'ancien jeton est refusé).
 
 Fonction **masquée tant qu'elle n'est pas configurée** dans `index.html` (bloc « Options de cette caisse ») :
 - `GH_REPO` : dépôt **privé** dédié aux ventes (ex. `scraper147/ventes`) ; `GH_DOSSIER` : dossier de cette caisse dans ce dépôt (ex. `sapin`).
@@ -164,7 +164,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v30';` → `'v31'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v31';` → `'v32'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
