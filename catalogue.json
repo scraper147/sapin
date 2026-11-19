@@ -1,7 +1,7 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 6,
+  "version": 7,
   "date": "2026-11-19",
   "pointsDeVente": [
     {
@@ -113,12 +113,13 @@
       "produits": [
         {
           "id": "e1",
-          "libelle": "Prix unitaire",
+          "libelle": "Epicéa",
           "prix": 30,
           "ordre": 1,
           "actif": true
         }
-      ]
+      ],
+      "prefixe": false
     },
     {
       "id": "cat2",
