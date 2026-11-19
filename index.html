@@ -331,12 +331,16 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .cxdays{display:flex;flex-wrap:wrap;gap:8px}
 .cxdays .todo{font-size:12px;font-weight:800;color:var(--red);margin-left:4px}
 .rcmodal>*{flex-shrink:0}
+.menu.tiles .mgrid.m3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.phone .menu.tiles .mgrid.m3{grid-template-columns:repeat(2,minmax(0,1fr))}
+.adm{display:inline-block;font-size:11px;font-weight:800;background:var(--tint);color:var(--green-d);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:middle}
+.rchist.repl{opacity:.6}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v28'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v30'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -569,13 +573,14 @@ var AUTO_DELAI = 15000, AUTO_MIN_INTERVALLE = 60000;
 var AUTO = { timer: null, last: 0, err: null };
 function daysToSend() {
   GH.sig = GH.sig || {};
-  var ds = Object.keys(S.days).concat(Object.keys(S.tiroir), Object.keys(S.caisse)).filter(function (d, i, a) { return a.indexOf(d) === i; });
-  return ds.filter(function (d) { return ((S.days[d] && S.days[d].length) || (S.tiroir[d] && S.tiroir[d].length) || S.caisse[d]) && GH.sig[d] !== daySig(d); }).sort();
+  var ds = Object.keys(S.days).concat(Object.keys(S.tiroir), cxDates()).filter(function (d, i, a) { return a.indexOf(d) === i; });
+  return ds.filter(function (d) { return ((S.days[d] && S.days[d].length) || (S.tiroir[d] && S.tiroir[d].length) || cxDay(d)) && GH.sig[d] !== daySig(d); }).sort();
 }
 function autoSchedule(delay) { if (!ghConfigured()) return; clearTimeout(AUTO.timer); AUTO.timer = setTimeout(autoSync, delay); }
 async function autoSync() {
   if (!ghReady() || S.ghBusy || navigator.onLine === false) return;
   stkSync(); // mouvements de stock en attente (file séparée)
+  cxSync().then(function () { cxRefresh(false); }); // fichier de caisse partagé : envoi des saisies puis lecture des saisies de l'Admin
   var todo = daysToSend(); if (!todo.length) return;
   var wait = AUTO.last + AUTO_MIN_INTERVALLE - Date.now();
   if (wait > 0 && !AUTO.err) { autoSchedule(wait); return; }
@@ -589,7 +594,7 @@ function autoStatus() {
   if (!ghConfigured()) return null;
   if (!ghReady()) return { ko: true, court: 'Envoi auto inactif', t: 'Envoi automatique inactif : touchez pour déverrouiller GitHub' };
   if (S.ghBusy === 'auto') return { court: 'Envoi…', t: 'Envoi automatique en cours…' };
-  var n = daysToSend().length, nq = typeof STK !== 'undefined' ? STK.queue.length : 0, last = Object.keys(GH.envois).map(function (k) { return GH.envois[k]; }).sort().pop();
+  var n = daysToSend().length, nq = (typeof STK !== 'undefined' ? STK.queue.length : 0) + (typeof CXF !== 'undefined' ? CXF.queue.length : 0), last = Object.keys(GH.envois).map(function (k) { return GH.envois[k]; }).sort().pop();
   if (n) {
     if (navigator.onLine === false) return { warn: true, court: 'En attente de réseau', t: 'Pas de réseau : ' + n + ' jour' + (n > 1 ? 's' : '') + ' à envoyer dès le retour d\u2019internet' };
     if (AUTO.err === 401) return { ko: true, court: 'Envoi auto inactif', t: 'GitHub refuse le jeton : touchez pour déverrouiller à nouveau' };
@@ -759,8 +764,9 @@ async function stkRefresh() {
   stkSync();
 }
 function stkPendingText() {
-  var n = STK.queue.length;
-  return n + ' mouvement' + (n > 1 ? 's' : '') + ' de stock';
+  var n = STK.queue.length, m = typeof CXF !== 'undefined' ? CXF.queue.length : 0, t = [];
+  if (n) t.push(n + ' mouvement' + (n > 1 ? 's' : '') + ' de stock'); if (m) t.push(m + ' saisie' + (m > 1 ? 's' : '') + ' de caisse');
+  return t.join(' et ') || '0 mouvement';
 }
 S.rq = {};
 
@@ -905,27 +911,49 @@ function vStock() {
     '</div></div>';
 }
 
-/* ---------- Caisse du jour : fond de caisse, retraits / apports, comptage ----------
-   S.caisse[date] = { fond: {montant, horodatage, detail?}, mouvements: [{id, type:'retrait'|'apport', montant, motif, horodatage}],
-                      comptages: [{horodatage, montant, detail?, attendu, ecart, laisse}] }  (le dernier comptage fait foi)
-   Attendu en caisse = fond + ventes payées en cash ce jour-là + apports − retraits.
-   « Ventes en cash » = argent liquide réellement entré dans le tiroir ce jour-là : ventes non annulées du jour,
-   plus la part cash des livraisons ajoutées ce jour-là à une vente d'un autre jour (et moins celles ajoutées un autre jour). */
-var COUPURES = [500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
+/* ---------- Caisse du jour : fichier de caisse partagé avec l'App admin ----------
+   Dépôt des ventes, <GH_DOSSIER>/caisse/AAAA-MM-JJ_<pdvId>.json (format agri-garden-caisse/caisse) :
+   { format, formatVersion:1, date, pointDeVente{id,nom}, creeLe, majLe, majPar, entrees:{ <id>: {type:'fond'|'retrait'|'apport'|'comptage', montant,
+     detail|null, motif?, horodatage, source:'caisse'|'admin', appareil?, (comptage) attendu, ecart, laisse, recette, attenduApres, viaFond} } }
+   - La tablette n'écrit que ses entrées (ids « <type>-caisse-… ») : relecture, ajout / retrait d'une clé, PUT avec le sha lu (3 essais sur 409/422).
+     Jamais de réécriture depuis la copie locale ; une correction = nouvelle entrée (le dernier fond fait foi) ou suppression + ajout.
+   - Copie locale (CXF.snap) = dernier contenu lu, pour l'affichage hors ligne ; file d'attente (CXF.queue) = opérations pas encore envoyées.
+   - Calcul : fond = dernière entrée fond ; recette d'un comptage = montant − laissé (dans le comptage, plus de retrait séparé) ;
+     attendu = fond + ventes cash (calculées ici) + apports − retraits − recettes ; le dernier comptage fait foi ;
+     « à recompter » si |attendu − attenduApres du dernier comptage| ≥ 0,005. */
+var COUPURES = [500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05]; // pas de pièces de 1 et 2 cents (arrondi aux 5 cents)
 var RETRAIT_MOTIFS = ['Dépôt au coffre', 'Remboursement client', 'Dépense', 'Autre'];
 var APPORT_MOTIFS = ['Ajout de monnaie', 'Autre'];
-function cxD() { return S.cxDate || today(); }
-/* Jours proposés dans « Caisse du jour » : aujourd'hui + jours gardés sur la tablette (ventes ou caisse), le plus récent d'abord ; « à compter » si pas compté */
-function vCxDays() {
-  var t = today(), ds = [t].concat(Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }), Object.keys(S.caisse)).filter(function (d, i, a) { return d <= t && a.indexOf(d) === i; }).sort().reverse();
-  if (ds.length < 2) return '';
-  return '<div class="hdays cxdays">' + ds.map(function (d) {
-    var todo = d !== t && cxNeedsCount(d);
-    return '<button class="choice' + (d === cxD() ? ' on' : '') + '" data-a="cxDay" data-v="' + d + '">' + (d === t ? 'Aujourd\u2019hui' : frDate(d).slice(0, 5)) + (todo ? ' <span class="todo">à compter</span>' : '') + '</button>';
-  }).join('') + '</div>';
+var CXF_KEY = STORE_KEY + '-caissefichier';
+var CXF = { snap: {}, queue: [], migre: false, busy: false, err: null, lecture: {} };
+try { var cxfSaved = JSON.parse(localStorage.getItem(CXF_KEY) || 'null'); if (cxfSaved) { CXF.snap = cxfSaved.snap || {}; CXF.queue = cxfSaved.queue || []; CXF.migre = !!cxfSaved.migre; } } catch (e) {}
+function saveCxf() {
+  var lim = isoDate(new Date(Date.now() - 40 * 864e5)); // copie locale : 40 derniers jours (plus les jours encore gardés sur la tablette)
+  Object.keys(CXF.snap).forEach(function (d) { if (d < lim && !(S.days[d] || []).length && !CXF.queue.some(function (o) { return o.date === d; })) delete CXF.snap[d]; });
+  try { localStorage.setItem(CXF_KEY, JSON.stringify({ snap: CXF.snap, queue: CXF.queue, migre: CXF.migre })); refreshUsage(); return true; } catch (e) { return false; }
 }
-function cxDay(d) { return S.caisse[d || today()] || null; }
-function cxEnsure(d) { d = d || today(); var c = S.caisse[d] || (S.caisse[d] = {}); c.mouvements = c.mouvements || []; c.comptages = c.comptages || []; return c; }
+function cxD() { return S.cxDate || today(); }
+function cxPdv(d) { var pl = placeOf(d); return pl && pl.id ? pl : { id: S.placeId, nom: (findPlace(S.placeId) || {}).nom || S.placeId }; }
+function cxPath(d, pdvId) { return GH_DOSSIER + '/caisse/' + d + '_' + pdvId + '.json'; }
+function cxStamp(iso) { return String(iso).slice(0, 19).replace(/\D/g, ''); }
+function cxNewId(type) { return type + '-caisse-' + cxStamp(isoLocal(new Date())) + '-' + GH.appareil + '-' + (Math.random().toString(36).slice(2) + '0000').slice(0, 4); }
+function cxOwn(e) { return e && e.source === 'caisse' && e.appareil === GH.appareil; }
+function cxDates() { var o = {}; Object.keys(CXF.snap).forEach(function (d) { o[d] = 1; }); CXF.queue.forEach(function (q) { o[q.date] = 1; }); return Object.keys(o); }
+/* Entrées d'un jour = dernière version lue + opérations en attente */
+function cxEntries(d) {
+  var sn = CXF.snap[d], pdv = cxPdv(d).id, e = {};
+  if (sn && (!sn.pdv || sn.pdv === pdv)) Object.keys(sn.entrees || {}).forEach(function (k) { e[k] = sn.entrees[k]; });
+  CXF.queue.forEach(function (q) { if (q.date !== d) return; if (q.op === 'add') e[q.id] = Object.assign({ attente: true }, q.entree); else delete e[q.id]; });
+  return e;
+}
+function cxDay(d) {
+  d = d || today();
+  var e = cxEntries(d), list = Object.keys(e).map(function (k) { return Object.assign({ id: k }, e[k]); }).sort(function (a, b) { return String(a.horodatage).localeCompare(String(b.horodatage)); });
+  if (!list.length) return null;
+  var fonds = list.filter(function (x) { return x.type === 'fond'; });
+  return { fond: fonds.slice(-1)[0] || null, fonds: fonds, mouvements: list.filter(function (x) { return x.type === 'retrait' || x.type === 'apport'; }),
+    comptages: list.filter(function (x) { return x.type === 'comptage'; }), entrees: list };
+}
 function cashSalesOf(d) {
   var tot = 0;
   Object.keys(S.days).forEach(function (day) {
@@ -940,59 +968,156 @@ function cashSalesOf(d) {
 }
 function cxSummary(d) {
   d = d || today();
-  var c = cxDay(d) || {}, mv = c.mouvements || [];
-  var sum = function (t) { return r2(mv.filter(function (m) { return m.type === t; }).reduce(function (a, m) { return a + m.montant; }, 0)); };
-  var r = { fond: c.fond ? c.fond.montant : null, ventes: cashSalesOf(d), apports: sum('apport'), retraits: sum('retrait') };
-  r.attendu = r2((r.fond || 0) + r.ventes + r.apports - r.retraits);
-  r.comptage = (c.comptages || []).slice(-1)[0] || null;
+  var c = cxDay(d) || {}, mv = c.mouvements || [], cp = c.comptages || [];
+  var sum = function (t) { return r2(mv.filter(function (m) { return m.type === t; }).reduce(function (a, m) { return a + (Number(m.montant) || 0); }, 0)); };
+  var r = { fond: c.fond ? c.fond.montant : null, ventes: cashSalesOf(d), apports: sum('apport'), retraits: sum('retrait'),
+    recettes: r2(cp.reduce(function (a, k) { return a + (Number(k.recette) || 0); }, 0)) };
+  r.attendu = r2((r.fond || 0) + r.ventes + r.apports - r.retraits - r.recettes);
+  r.comptage = cp.slice(-1)[0] || null;
   return r;
 }
-/* Fond proposé : ce qui a été laissé en caisse au dernier comptage d'un jour précédent */
-function cxFondPropose(d) {
-  d = d || today();
-  var prev = Object.keys(S.caisse).filter(function (x) { return x < d; }).sort().reverse();
-  for (var i = 0; i < prev.length; i++) {
-    var k = (S.caisse[prev[i]].comptages || []).slice(-1)[0];
-    if (k) return r2((k.laisse != null ? k.laisse : k.montant) + (cxDelta(prev[i]) || 0)); // argent laissé + cash encaissé (ou sorti) après le comptage
-  }
-  return null;
-}
-/* Écart d'argent liquide depuis le dernier comptage (ventes cash, retraits, apports, fond modifié) : null si pas de comptage */
+/* Écart d'argent liquide depuis le dernier comptage : null si pas de comptage */
 function cxDelta(d) {
-  var c = cxDay(d), k = c && (c.comptages || []).slice(-1)[0]; if (!k) return null;
+  var c = cxDay(d), k = c && c.comptages.slice(-1)[0]; if (!k) return null;
   return r2(cxSummary(d).attendu - (k.attenduApres != null ? k.attenduApres : k.attendu));
 }
-/* Jour à compter : activité sans comptage, ou de l'argent entré / sorti après le dernier comptage */
 function cxNeedsCount(d) {
-  var c = cxDay(d), has = (S.days[d] || []).length || (c && (c.fond || (c.mouvements || []).length));
+  var c = cxDay(d), has = (S.days[d] || []).length || (c && (c.fond || c.mouvements.length));
   if (!has) return false;
   var dl = cxDelta(d); return dl === null || Math.abs(dl) >= 0.005;
 }
-/* Jour précédent pas compté (le plus récent avant aujourd'hui avec des ventes ou un fond) : le fond du matin peut servir de comptage */
+/* Fond proposé : laissé au dernier comptage d'un jour précédent + cash entré (ou sorti) après ce comptage */
+function cxFondPropose(d) {
+  d = d || today();
+  var prev = cxDates().concat(Object.keys(S.days)).filter(function (x, i, a) { return x < d && a.indexOf(x) === i; }).sort().reverse();
+  for (var i = 0; i < prev.length; i++) {
+    var c = cxDay(prev[i]), k = c && c.comptages.slice(-1)[0];
+    if (k) return r2((k.laisse != null ? k.laisse : k.montant) + (cxDelta(prev[i]) || 0));
+  }
+  return null;
+}
 function cxPrevUncounted() {
-  var t = today(), ds = Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }).concat(Object.keys(S.caisse).filter(function (d) { return S.caisse[d].fond; }))
+  var t = today(), ds = Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }).concat(cxDates().filter(function (d) { var c = cxDay(d); return c && c.fond; }))
     .filter(function (d, i, a) { return d < t && a.indexOf(d) === i; }).sort();
   var d = ds.pop(); if (!d) return null;
   return cxNeedsCount(d) ? d : null;
 }
+/* Champ `caisse` du fichier de ventes (même forme qu'avant ; recettes rendues comme retraits automatiques pour la compatibilité) */
 function cxExport(d) {
   var c = cxDay(d); if (!c) return null;
-  var s = cxSummary(d), k = s.comptage;
-  return { fondDeCaisse: s.fond, ventesCash: s.ventes, apports: s.apports, retraits: s.retraits, attendu: s.attendu,
+  var s = cxSummary(d), k = s.comptage, clean = function (x) { var o = Object.assign({}, x); delete o.attente; return o; };
+  var mv = c.mouvements.map(clean).concat(c.comptages.filter(function (x) { return x.recette > 0.005; }).map(function (x) { return { id: x.id + '-recette', type: 'retrait', montant: x.recette, motif: 'Recette de fin de journée', horodatage: x.horodatage, auto: true, source: x.source }; }))
+    .sort(function (a, b) { return String(a.horodatage).localeCompare(String(b.horodatage)); });
+  return { source: 'fichier de caisse partagé', fondDeCaisse: s.fond, ventesCash: s.ventes, apports: s.apports, retraits: r2(s.retraits + s.recettes), attendu: s.attendu,
     compte: k ? k.montant : null, ecart: k ? k.ecart : null, laissePourDemain: k ? k.laisse : null,
-    fond: c.fond || null, mouvements: c.mouvements || [], comptages: c.comptages || [] };
+    fond: c.fond ? clean(c.fond) : null, mouvements: mv, comptages: c.comptages.map(clean) };
 }
-function cxSig(d) { var c = cxDay(d); return c ? (c.fond ? c.fond.montant : '-') + '/' + (c.mouvements || []).length + '/' + (c.comptages || []).length : ''; }
+function cxSig(d) { var e = cxEntries(d), ks = Object.keys(e).sort(); return ks.length ? ks.length + ':' + ks.join(',').length + ':' + r2(ks.reduce(function (a, k) { return a + (Number(e[k].montant) || 0); }, 0)) : ''; }
+/* ---------- Écriture et lecture du fichier partagé ---------- */
+function cxAdd(d, entree) {
+  var p = cxPdv(d), id = cxNewId(entree.type);
+  entree.source = 'caisse'; entree.appareil = GH.appareil;
+  CXF.queue.push({ op: 'add', date: d, pdv: p.id, pdvNom: p.nom, id: id, entree: entree });
+  saveCxf(); delete S.exported[d]; if (typeof autoSchedule === 'function') autoSchedule(AUTO_DELAI);
+  return id;
+}
+function cxRemove(d, id) {
+  var qi = CXF.queue.findIndex(function (o) { return o.op === 'add' && o.id === id; });
+  if (qi >= 0) CXF.queue.splice(qi, 1);
+  else { var p = cxPdv(d); CXF.queue.push({ op: 'del', date: d, pdv: p.id, pdvNom: p.nom, id: id }); }
+  saveCxf(); delete S.exported[d]; if (typeof autoSchedule === 'function') autoSchedule(AUTO_DELAI);
+}
+function cxNewDoc(d, pdv, nom) { var now = isoLocal(new Date()); return { format: 'agri-garden-caisse/caisse', formatVersion: 1, date: d, pointDeVente: { id: pdv, nom: nom }, creeLe: now, majLe: now, majPar: 'caisse', entrees: {} }; }
+async function cxApplyFile(d, pdv, nom, ops) {
+  var path = cxPath(d, pdv), refused = [];
+  for (var essai = 0; essai < 3; essai++) {
+    var g = await ghApi('GET', ghUrl(path), GH.token), doc, sha = null;
+    if (g.status === 404) doc = cxNewDoc(d, pdv, nom);
+    else if (!g.ok) throw g.status;
+    else { var j = await g.json(); sha = j.sha; doc = JSON.parse(b64utf8d(j.content)); }
+    if (!doc.entrees || typeof doc.entrees !== 'object' || Array.isArray(doc.entrees)) doc.entrees = {};
+    refused = [];
+    ops.forEach(function (o) {
+      if (o.op === 'add') { if (!doc.entrees[o.id]) doc.entrees[o.id] = o.entree; } // déjà là (envoi répété, migration) : pas de doublon
+      else { var e = doc.entrees[o.id]; if (!e) return; if (cxOwn(e)) delete doc.entrees[o.id]; else refused.push(o.id); }
+    });
+    doc.majLe = isoLocal(new Date()); doc.majPar = 'caisse';
+    var body = { message: 'Caisse ' + d + ' ' + nom + ' (Caisse Sapins, appareil ' + GH.appareil + ')', content: b64utf8(JSON.stringify(doc, null, 2)) };
+    if (sha) body.sha = sha;
+    var r = await ghApi('PUT', ghUrl(path), GH.token, body);
+    if (r.ok) { CXF.snap[d] = { pdv: pdv, entrees: doc.entrees, majLe: doc.majLe, lu: isoLocal(new Date()) }; return refused; }
+    if (r.status === 409 || r.status === 422) continue;
+    throw r.status;
+  }
+  throw 409;
+}
+async function cxSync() {
+  if (CXF.busy || !CXF.queue.length || !ghReady() || navigator.onLine === false) return;
+  CXF.busy = true;
+  try {
+    while (CXF.queue.length) {
+      var f = CXF.queue[0], grp = CXF.queue.filter(function (o) { return o.date === f.date && o.pdv === f.pdv; });
+      var refused = await cxApplyFile(f.date, f.pdv, f.pdvNom, grp);
+      CXF.queue = CXF.queue.filter(function (o) { return grp.indexOf(o) < 0; });
+      if (refused.length) CXF.err = 'pasmien'; else CXF.err = null;
+      saveCxf();
+    }
+  } catch (e) { var c = typeof e === 'number' ? e : 0; if (c === 401) { delete GH.token; saveGh(); } CXF.err = c; saveCxf(); }
+  finally { CXF.busy = false; render(); }
+}
+async function cxRead(d) {
+  var p = cxPdv(d);
+  try {
+    var g = await ghApi('GET', ghUrl(cxPath(d, p.id)), GH.token);
+    if (g.status === 404) CXF.snap[d] = { pdv: p.id, entrees: {}, lu: isoLocal(new Date()) };
+    else if (g.ok) { var doc = JSON.parse(b64utf8d((await g.json()).content)); CXF.snap[d] = { pdv: p.id, entrees: doc.entrees || {}, majLe: doc.majLe, lu: isoLocal(new Date()) }; }
+    else { if (g.status === 401) { delete GH.token; saveGh(); } return; }
+    CXF.lecture[d] = Date.now(); saveCxf();
+  } catch (e) {}
+}
+/* Lecture des saisies de l'Admin : jour en cours, jour affiché et veille pas comptée (au plus une fois toutes les 20 s par jour, sauf à la demande) */
+async function cxRefresh(force) {
+  if (!ghReady() || navigator.onLine === false || !S.placeId) return;
+  var ds = [today(), cxD(), cxPrevUncounted()].filter(function (d, i, a) { return d && a.indexOf(d) === i; });
+  var changed = false;
+  for (var i = 0; i < ds.length; i++) {
+    if (!force && CXF.lecture[ds[i]] && Date.now() - CXF.lecture[ds[i]] < 20000) continue;
+    var before = cxSig(ds[i]); await cxRead(ds[i]); if (cxSig(ds[i]) !== before) changed = true;
+  }
+  if (changed) render();
+}
+/* Reprise des saisies faites avant le fichier partagé (S.caisse, v26 à v29) : identifiants stables, pas de doublon */
+function cxMigrate() {
+  if (!Object.keys(S.caisse || {}).length) { if (!CXF.migre) { CXF.migre = true; saveCxf(); } return; } // rien (ou plus rien) à reprendre ; identifiants stables : relancer ne crée pas de doublon
+  var app = GH.appareil;
+  Object.keys(S.caisse || {}).forEach(function (d) {
+    var c = S.caisse[d] || {}, p = cxPdv(d), add = function (id, e) { e.source = 'caisse'; e.appareil = app; if (!CXF.queue.some(function (o) { return o.id === id; })) CXF.queue.push({ op: 'add', date: d, pdv: p.id, pdvNom: p.nom, id: id, entree: e }); };
+    if (c.fond) add('fond-caisse-' + cxStamp(c.fond.horodatage) + '-' + app + '-mig0', { type: 'fond', montant: c.fond.montant, detail: c.fond.detail || null, horodatage: c.fond.horodatage });
+    (c.mouvements || []).forEach(function (m) {
+      if (m.auto) return; // l'ancienne recette automatique va dans le comptage
+      add(m.type + '-caisse-' + cxStamp(m.horodatage) + '-' + app + '-' + String(m.id || 'm000').slice(-4), { type: m.type, montant: m.montant, motif: m.motif, horodatage: m.horodatage });
+    });
+    (c.comptages || []).forEach(function (k, i) {
+      var laisse = k.laisse != null ? k.laisse : k.montant, recette = k.recette != null ? k.recette : r2(k.montant - laisse);
+      add('comptage-caisse-' + cxStamp(k.horodatage) + '-' + app + '-mig' + i, { type: 'comptage', montant: k.montant, detail: k.detail || null, attendu: k.attendu, ecart: k.ecart,
+        laisse: laisse, recette: recette, attenduApres: k.attenduApres != null ? k.attenduApres : r2(k.attendu - recette), viaFond: !!k.viaFond, horodatage: k.horodatage });
+    });
+  });
+  CXF.migre = true; saveCxf();
+  if (Object.keys(S.caisse || {}).length) { S.caisse = {}; persist(true); }
+}
 /* Comptage par coupure : { '50': 2, '0.2': 7 } → total */
 function ccTotal(det) { return r2(COUPURES.reduce(function (a, v) { return a + v * (parseInt(det[String(v)], 10) || 0); }, 0)); }
 function coupLabel(v) { return v >= 1 ? v + ' €' : Math.round(v * 100) + ' c'; }
 function signed(n) { return (n > 0 ? '+' : n < 0 ? '−' : '') + money(Math.abs(n)); }
-/* Rapport de caisse (impression ePOS + aperçu) */
+function srcLabel(e) { return e.source === 'admin' ? 'Admin' : cxOwn(e) ? 'Tablette' : 'Autre tablette'; }
+/* Rapport de caisse (impression ePOS + aperçu), à partir des données fusionnées */
 function cxReportXml(d) {
   d = d || today();
-  var x = '<text lang="fr"/>', all = salesOf(d), ok = validSales(all), s = cxSummary(d), c = cxDay(d) || {}, pl = placeOf(d) || findPlace(S.placeId);
+  var x = '<text lang="fr"/>', all = salesOf(d), ok = validSales(all), s = cxSummary(d), c = cxDay(d) || { mouvements: [], comptages: [] }, pl = placeOf(d) || findPlace(S.placeId);
   function t(str) { x += '<text>' + xmlEsc(tkTxt(str)) + '&#10;</text>'; }
   function st(a) { x += '<text ' + a + '/>'; }
+  function hm(iso) { return (iso.slice(0, 10) !== d ? frDate(iso).slice(0, 5) + ' ' : '') + iso.slice(11, 16); }
   var SEP = Array(TK_W + 1).join('-'), now = isoLocal(new Date());
   st('align="center"'); st('em="true" dw="true" dh="true"'); t('Rapport de caisse'); st('em="false" dw="false" dh="false"');
   t('Agri-Garden · ' + (pl ? pl.nom : '')); t('Journée du ' + frDate(d)); t('Imprimé le ' + frDate(now) + ' à ' + now.slice(11, 16));
@@ -1004,17 +1129,19 @@ function cxReportXml(d) {
   t(tkLine('  dont cash', tkMoney(ok.reduce(function (a, v) { return a + v.paiement.cash; }, 0))));
   t(tkLine('  dont Bancontact', tkMoney(ok.reduce(function (a, v) { return a + v.paiement.bancontact; }, 0))));
   t(SEP); st('em="true"'); t('Caisse (argent liquide)'); st('em="false"');
-  t(tkLine('Fond de caisse', s.fond == null ? 'non saisi' : tkMoney(s.fond)));
+  t(tkLine('Fond de caisse' + (c.fond && c.fond.source === 'admin' ? ' (Admin)' : ''), s.fond == null ? 'non saisi' : tkMoney(s.fond)));
   t(tkLine('+ Ventes en cash', tkMoney(s.ventes)));
-  (c.mouvements || []).forEach(function (m) { t(tkLine((m.type === 'retrait' ? '- ' : '+ ') + (m.horodatage.slice(0, 10) !== d ? frDate(m.horodatage).slice(0, 5) + ' ' : '') + m.horodatage.slice(11, 16) + ' ' + m.motif, tkMoney(m.montant))); });
+  c.mouvements.forEach(function (m) { t(tkLine((m.type === 'retrait' ? '- ' : '+ ') + hm(m.horodatage) + ' ' + m.motif + (m.source === 'admin' ? ' (Admin)' : ''), tkMoney(m.montant))); });
+  c.comptages.forEach(function (k) { if (k.recette > 0.005) t(tkLine('- ' + hm(k.horodatage) + ' Recette de fin de journée', tkMoney(k.recette))); });
   st('em="true"'); t(tkLine('= Attendu en caisse', tkMoney(s.attendu))); st('em="false"');
   if (s.comptage) {
-    t(tkLine(s.comptage.horodatage.slice(0, 10) !== d ? 'Compté le ' + frDate(s.comptage.horodatage).slice(0, 5) + ' à ' + s.comptage.horodatage.slice(11, 16) : 'Compté à ' + s.comptage.horodatage.slice(11, 16), tkMoney(s.comptage.montant)));
-    st('em="true"'); t(tkLine('Écart', (s.comptage.ecart > 0 ? '+' : '') + tkMoney(s.comptage.ecart))); st('em="false"');
-    if (s.comptage.laisse != null) t(tkLine('Laissé en caisse pour demain', tkMoney(s.comptage.laisse)));
-    if (s.comptage.detail) {
+    var k = s.comptage;
+    t(tkLine((k.horodatage.slice(0, 10) !== d ? 'Compté le ' + frDate(k.horodatage).slice(0, 5) + ' à ' : 'Compté à ') + k.horodatage.slice(11, 16) + (k.source === 'admin' ? ' (Admin)' : ''), tkMoney(k.montant)));
+    st('em="true"'); t(tkLine('Écart', (k.ecart > 0 ? '+' : '') + tkMoney(k.ecart))); st('em="false"');
+    if (k.laisse != null) t(tkLine('Laissé en caisse pour demain', tkMoney(k.laisse)));
+    if (k.detail) {
       t(SEP); t('Détail du comptage');
-      COUPURES.forEach(function (v) { var q = parseInt(s.comptage.detail[String(v)], 10) || 0; if (q) t(tkLine('  ' + q + ' × ' + coupLabel(v), tkMoney(q * v))); });
+      COUPURES.forEach(function (v) { var q = parseInt(k.detail[String(v)], 10) || 0; if (q) t(tkLine('  ' + q + ' × ' + coupLabel(v), tkMoney(q * v))); });
     }
   } else t('Caisse pas encore comptée');
   var sans = (S.tiroir[d] || []).filter(function (o) { return !o.venteId; }).length;
@@ -1027,6 +1154,24 @@ function cxPrint(d) {
 }
 
 /* ---------- Vues ---------- */
+function vCxDays() {
+  var t = today(), ds = [t].concat(Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }), cxDates().filter(function (d) { return cxDay(d); })).filter(function (d, i, a) { return d <= t && a.indexOf(d) === i; }).sort().reverse();
+  if (ds.length < 2) return '';
+  return '<div class="hdays cxdays">' + ds.map(function (d) {
+    var todo = d !== t && cxNeedsCount(d);
+    return '<button class="choice' + (d === cxD() ? ' on' : '') + '" data-a="cxDay" data-v="' + d + '">' + (d === t ? 'Aujourd’hui' : frDate(d).slice(0, 5)) + (todo ? ' <span class="todo">à compter</span>' : '') + '</button>';
+  }).join('') + '</div>';
+}
+function vCxSync(d) {
+  var n = CXF.queue.filter(function (o) { return o.date === d; }).length, sn = CXF.snap[d];
+  if (CXF.busy) return '<div class="rcstat">Envoi des saisies…</div>';
+  if (n) {
+    var why = !ghReady() ? 'envoi GitHub verrouillé : touchez le bandeau ☁ de l’accueil' : navigator.onLine === false ? 'pas de réseau : envoi dès le retour d’internet' : CXF.err != null && CXF.err !== 'pasmien' ? ghError(CXF.err) : 'envoi dans quelques instants';
+    return '<div class="rcstat warn">' + n + ' saisie' + (n > 1 ? 's' : '') + ' en attente sur la tablette (' + esc(why) + ')</div>';
+  }
+  if (CXF.err === 'pasmien') return '<div class="rcstat ko">Une suppression a été refusée : cette saisie a été faite dans l’App admin.</div>';
+  return sn && sn.lu ? '<div class="rcstat ok">Fichier de caisse partagé avec l’App admin · lu le ' + frDate(sn.lu).slice(0, 5) + ' à ' + sn.lu.slice(11, 16) + '</div>' : '';
+}
 function vCcGrid() {
   function row(v) { var k = String(v), q = S.cc[k] || ''; return '<label class="ccrow"><span>' + coupLabel(v) + '</span><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0" data-f="cc:' + k + '" value="' + esc(q) + '"><b id="ccs-' + k.replace('.', '_') + '">' + (q ? money(v * q) : '') + '</b></label>'; }
   return '<div class="ccgrid"><div class="cccol"><div class="rccat">Billets</div>' + COUPURES.filter(function (v) { return v >= 5; }).map(row).join('') + '</div>' +
@@ -1036,15 +1181,15 @@ function ccAmount() { return S.ccMode === 'detail' ? ccTotal(S.cc) : r2(num(S.cx
 function vFond() {
   var isT = cxD() === today(), prop = isT ? cxFondPropose() : null, c = cxDay(cxD());
   return '<div class="overlay"><div class="modal rcmodal" data-keep="fond"><div class="row"><h2>Fond de caisse</h2><button class="btn" data-a="close">' + (c && c.fond ? 'Fermer' : 'Plus tard') + '</button></div>' +
-    '<div class="sub">Argent présent dans le tiroir à l’ouverture du ' + frDate(cxD()) + (prop != null ? '. Estimé dans le tiroir à la dernière fermeture : <strong>' + money(prop) + '</strong>.' : '.') + '</div>' +
+    '<div class="sub">Argent présent dans le tiroir à l’ouverture du ' + frDate(cxD()) + (prop != null ? '. Estimé dans le tiroir à la dernière fermeture : <strong>' + money(prop) + '</strong>.' : '.') + (c && c.fond ? ' Fond actuel : ' + money(c.fond.montant) + (c.fond.source === 'admin' ? ' (Admin)' : '') + ' ; un nouveau montant le remplace.' : '') + '</div>' +
     '<div class="seg" style="align-self:flex-start"><button class="' + (S.ccMode !== 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="total">Montant total</button><button class="' + (S.ccMode === 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="detail">Billets et pièces</button></div>' +
     (function () { var pd = isT ? cxPrevUncounted() : null; if (!pd) return ''; var ps = cxSummary(pd);
-      var pk = (cxDay(pd).comptages || []).slice(-1)[0], pdl = cxDelta(pd);
-      return '<div class="cxprev"><div><strong>' + (pk ? 'La caisse du ' + frDate(pd).slice(0, 5) + ' a changé depuis son comptage de ' + pk.horodatage.slice(11, 16) + ' (' + signed(pdl) + ' en cash).' : 'La caisse du ' + frDate(pd).slice(0, 5) + ' n\u2019a pas été comptée.') + '</strong> Attendu en fin de journée : ' + money(ps.attendu) + '.</div>' +
+      var pk = (cxDay(pd) || { comptages: [] }).comptages.slice(-1)[0], pdl = cxDelta(pd);
+      return '<div class="cxprev"><div><strong>' + (pk ? 'La caisse du ' + frDate(pd).slice(0, 5) + ' a changé depuis son comptage de ' + pk.horodatage.slice(11, 16) + ' (' + signed(pdl) + ' en cash).' : 'La caisse du ' + frDate(pd).slice(0, 5) + ' n’a pas été comptée.') + '</strong> Attendu en fin de journée : ' + money(ps.attendu) + '.</div>' +
         '<button class="rcchip' + (S.fondPrev ? ' on' : '') + '" data-a="fondPrevTog">' + (S.fondPrev ? '✓ ' : '') + 'Compter aussi comme fin de journée du ' + frDate(pd).slice(0, 5) + '</button>' +
-        '<div class="sub">À laisser coché si personne n\u2019a touché au tiroir depuis la fermeture : le montant saisi devient le comptage du ' + frDate(pd).slice(0, 5) + ' (avec son écart) et le fond d\u2019aujourd\u2019hui.</div></div>'; })() +
+        '<div class="sub">À laisser coché si personne n’a touché au tiroir depuis la fermeture : le montant saisi devient le comptage du ' + frDate(pd).slice(0, 5) + ' (avec son écart) et le fond d’aujourd’hui.</div></div>'; })() +
     (S.ccMode === 'detail' ? vCcGrid() : '<label class="f">Montant (€)<input type="text" inputmode="decimal" data-f="cxMontant" value="' + esc(S.cxMontant) + '" placeholder="0,00" autocomplete="off"></label>') +
-    (S.cxMsg && S.modal === 'fond' ? '' : '') + '<div class="rcfoot"><span class="rctot">Fond : <span id="ccTot">' + money(ccAmount()) + '</span></span><button class="btn btn-primary" data-a="fondSave">Enregistrer le fond</button></div></div></div>';
+    '<div class="rcfoot"><span class="rctot">Fond : <span id="ccTot">' + money(ccAmount()) + '</span></span><button class="btn btn-primary" data-a="fondSave">Enregistrer le fond</button></div></div></div>';
 }
 function vCxMv() {
   var ret = S.cxType === 'retrait', motifs = ret ? RETRAIT_MOTIFS : APPORT_MOTIFS, s = cxSummary(cxD());
@@ -1059,38 +1204,50 @@ function vCxMv() {
 function vComptage() {
   var s = cxSummary(cxD()), amt = ccAmount(), ec = r2(amt - s.attendu);
   return '<div class="overlay"><div class="modal rcmodal" data-keep="cpt"><div class="row"><h2>Compter la caisse</h2><button class="btn" data-a="cxBack">Retour</button></div>' +
-    '<div class="sub">Comptez tout l’argent du tiroir. Attendu : <strong>' + money(s.attendu) + '</strong> (fond ' + (s.fond == null ? 'non saisi' : money(s.fond)) + ' + ventes cash ' + money(s.ventes) + (s.apports ? ' + apports ' + money(s.apports) : '') + (s.retraits ? ' − retraits ' + money(s.retraits) : '') + ').</div>' +
+    '<div class="sub">Comptez tout l’argent du tiroir. Attendu : <strong>' + money(s.attendu) + '</strong> (fond ' + (s.fond == null ? 'non saisi' : money(s.fond)) + ' + ventes cash ' + money(s.ventes) + (s.apports ? ' + apports ' + money(s.apports) : '') + (s.retraits ? ' − retraits ' + money(s.retraits) : '') + (s.recettes ? ' − recettes ' + money(s.recettes) : '') + ').</div>' +
     '<div class="seg" style="align-self:flex-start"><button class="' + (S.ccMode === 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="detail">Billets et pièces</button><button class="' + (S.ccMode !== 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="total">Montant total</button></div>' +
     (S.ccMode === 'detail' ? vCcGrid() : '<label class="f">Montant compté (€)<input type="text" inputmode="decimal" data-f="cxMontant" value="' + esc(S.cxMontant) + '" placeholder="0,00" autocomplete="off"></label>') +
     '<div class="cxres"><div><span class="sub">Compté</span><strong id="ccTot">' + money(amt) + '</strong></div><div><span class="sub">Attendu</span><strong>' + money(s.attendu) + '</strong></div><div><span class="sub">Écart</span><strong id="ccEc" class="' + (Math.abs(ec) < 0.005 ? 'okc' : 'koc') + '">' + signed(ec) + '</strong></div></div>' +
-    '<label class="f">Laisser en caisse pour demain (€, facultatif)<input type="text" inputmode="decimal" data-f="cxLaisse" value="' + esc(S.cxLaisse) + '" placeholder="Fond de demain" autocomplete="off"></label>' +
-    '<div class="sub">Le reste (la recette sortie du tiroir) est noté automatiquement comme retrait « Recette de fin de journée ».</div>' +
+    '<label class="f">Laisser en caisse pour demain (€)<input type="text" inputmode="decimal" data-f="cxLaisse" value="' + esc(S.cxLaisse) + '" placeholder="Obligatoire" autocomplete="off"></label>' +
+    '<div class="rcchips"><button class="rcchip' + (S.cxLaisse === '0' ? ' on' : '') + '" data-a="cxLaisseSet" data-v="0">Tout retirer (0 €)</button><button class="rcchip" data-a="cxLaisseSet" data-v="tout">Tout laisser</button></div>' +
+    '<div class="sub">La recette (compté − laissé) est retirée du tiroir et notée dans le comptage.</div>' +
     (S.cxMsg ? '<div class="rcmsg warn">' + esc(S.cxMsg) + '</div>' : '') +
     '<div class="actions"><button class="btn" data-a="cxBack">Annuler</button><button class="btn btn-primary" data-a="cptSave">Enregistrer le comptage</button></div></div></div>';
 }
 function vCaisseDuJour() {
-  var s = cxSummary(cxD()), c = cxDay(cxD()) || {}, mv = (c.mouvements || []).slice().reverse(), k = s.comptage, ok = validSales(salesOf(cxD())), bc = r2(ok.reduce(function (a, v) { return a + v.paiement.bancontact; }, 0));
+  var d = cxD(), s = cxSummary(d), c = cxDay(d) || { mouvements: [], comptages: [], entrees: [] }, k = s.comptage, ok = validSales(salesOf(d)), bc = r2(ok.reduce(function (a, v) { return a + v.paiement.bancontact; }, 0));
   var line = function (l, v, cls, act) { return '<div class="cxl ' + (cls || '') + '"><span>' + l + '</span><span class="cxv">' + v + (act || '') + '</span></div>'; };
-  return '<div class="overlay"><div class="modal rcmodal" data-keep="cx"><div class="row"><h2>' + (cxD() === today() ? 'Caisse du jour' : 'Caisse du ' + frDate(cxD()).slice(0, 5)) + '</h2><button class="btn" data-a="close">Fermer</button></div>' +
-    vCxDays() + '<div class="sub">' + frDate(cxD()) + ' · argent liquide du tiroir. Bancontact du jour : ' + money(bc) + ' (hors tiroir).</div>' +
+  var adm = function (e) { return e && e.source === 'admin' ? ' <span class="adm">Admin</span>' : ''; };
+  var TYP = { fond: 'Fond de caisse', retrait: 'Retrait', apport: 'Apport', comptage: 'Comptage' };
+  var journal = c.entrees.slice().reverse().map(function (e) {
+    var hm = (e.horodatage.slice(0, 10) !== d ? frDate(e.horodatage).slice(0, 5) + ' ' : '') + e.horodatage.slice(11, 16);
+    var txt = TYP[e.type] + (e.motif ? ' · ' + esc(e.motif) : '') + (e.type === 'comptage' ? ' · laissé ' + money(e.laisse) + (e.recette > 0.005 ? ', recette ' + money(e.recette) : '') + (e.viaFond ? ' (avec le fond du lendemain)' : '') : '');
+    var val = e.type === 'retrait' ? '−' + money(e.montant) : e.type === 'apport' ? '+' + money(e.montant) : money(e.montant);
+    var replaced = e.type === 'fond' && c.fond && c.fond.id !== e.id;
+    var act = !cxOwn(e) ? '' : S.cxDel === e.id ? '<button class="btn btn-danger" data-a="cxDelGo" data-v="' + esc(e.id) + '" style="border:1px solid var(--red)">Confirmer la suppression</button><button class="btn" data-a="cxDelNo">Annuler</button>' : '<button class="btn btn-danger" data-a="cxDelAsk" data-v="' + esc(e.id) + '">Supprimer</button>';
+    return '<div class="rchist' + (replaced ? ' repl' : '') + '"><div class="rch-top"><strong>' + hm + ' · ' + txt + '</strong><strong>' + val + '</strong></div>' +
+      '<div class="rch-a"><span class="sub" style="margin-right:auto">' + srcLabel(e) + (e.attente ? ' · <b class="rcwait">en attente d’envoi</b>' : '') + (replaced ? ' · remplacé' : '') + '</span>' + act + '</div></div>';
+  }).join('');
+  return '<div class="overlay"><div class="modal rcmodal" data-keep="cx"><div class="row"><h2>' + (d === today() ? 'Caisse du jour' : 'Caisse du ' + frDate(d).slice(0, 5)) + '</h2><button class="btn" data-a="close">Fermer</button></div>' +
+    vCxDays() + '<div class="sub">' + frDate(d) + ' · argent liquide du tiroir. Bancontact du jour : ' + money(bc) + ' (hors tiroir).</div>' +
+    vCxSync(d) +
     (S.cxDone ? '<div class="rcmsg ' + (S.cxDone.ok ? 'ok' : 'warn') + '">' + esc(S.cxDone.text) + '</div>' : '') +
-    (function () { var dl = cxDelta(cxD()); if (dl === null || Math.abs(dl) < 0.005) return ''; return '<div class="rcstat ko">Depuis le comptage de ' + k.horodatage.slice(11, 16) + ' : ' + signed(dl) + ' en cash (ventes, retraits, apports ou fond modifié). Recomptez la caisse.</div>'; })() +
+    (function () { var dl = cxDelta(d); if (dl === null || Math.abs(dl) < 0.005) return ''; return '<div class="rcstat ko">Depuis le comptage de ' + k.horodatage.slice(11, 16) + ' : ' + signed(dl) + ' en cash (ventes, retraits, apports ou fond modifié). Recomptez la caisse.</div>'; })() +
     '<div class="cxsum">' +
-      line('Fond de caisse', s.fond == null ? '<em>non saisi</em>' : money(s.fond), '', ' <button class="small" data-a="fondOpen">' + (s.fond == null ? 'Saisir' : 'Modifier') + '</button>') +
+      line('Fond de caisse' + adm(c.fond), s.fond == null ? '<em>non saisi</em>' : money(s.fond), '', ' <button class="small" data-a="fondOpen">' + (s.fond == null ? 'Saisir' : 'Modifier') + '</button>') +
       line('+ Ventes en cash', money(s.ventes)) +
       (s.apports ? line('+ Apports', money(s.apports)) : '') +
       (s.retraits ? line('− Retraits', money(s.retraits)) : '') +
+      (s.recettes ? line('− Recettes retirées', money(s.recettes)) : '') +
       line('= Attendu en caisse', money(s.attendu), 'tot') +
-      (k ? line((k.horodatage.slice(0, 10) !== cxD() ? 'Compté le ' + frDate(k.horodatage).slice(0, 5) + ' à ' : 'Compté à ') + k.horodatage.slice(11, 16), money(k.montant)) + line('Écart au comptage', signed(k.ecart), Math.abs(k.ecart) < 0.005 ? 'okl' : 'kol') + (k.laisse != null ? line('Laissé pour demain', money(k.laisse)) : '') : '') +
+      (k ? line((k.horodatage.slice(0, 10) !== d ? 'Compté le ' + frDate(k.horodatage).slice(0, 5) + ' à ' : 'Compté à ') + k.horodatage.slice(11, 16) + adm(k), money(k.montant)) + line('Écart au comptage', signed(k.ecart), Math.abs(k.ecart) < 0.005 ? 'okl' : 'kol') + (k.laisse != null ? line('Laissé pour demain', money(k.laisse)) : '') : '') +
     '</div>' +
     '<div class="cxbtns"><button class="btn" data-a="cxMvOpen" data-v="retrait">− Retrait</button><button class="btn" data-a="cxMvOpen" data-v="apport">+ Apport</button><button class="btn btn-primary" data-a="cptOpen">' + (k ? 'Recompter la caisse' : 'Compter la caisse') + '</button></div>' +
     (prConfigured() ? '<div class="actions" style="justify-content:flex-start"><button class="btn" data-a="cxPrint"' + (S.prBusy ? ' disabled' : '') + '>Imprimer le rapport</button></div>' : '') +
-    '<h3 class="rch3">Retraits et apports</h3>' +
-    (mv.length ? mv.map(function (m) {
-      return '<div class="rchist"><div class="rch-top"><strong>' + (m.horodatage.slice(0, 10) !== cxD() ? frDate(m.horodatage).slice(0, 5) + ' ' : '') + m.horodatage.slice(11, 16) + ' · ' + (m.type === 'retrait' ? 'Retrait' : 'Apport') + ' · ' + esc(m.motif) + '</strong><strong>' + (m.type === 'retrait' ? '−' : '+') + money(m.montant) + '</strong></div>' +
-        '<div class="rch-a">' + (S.cxDel === m.id ? '<button class="btn btn-danger" data-a="cxDelGo" data-v="' + esc(m.id) + '" style="border:1px solid var(--red)">Confirmer la suppression</button><button class="btn" data-a="cxDelNo">Annuler</button>' : '<button class="btn btn-danger" data-a="cxDelAsk" data-v="' + esc(m.id) + '">Supprimer</button>') + '</div></div>';
-    }).join('') : '<div class="sub">Aucun retrait ni apport ce jour-là.</div>') +
-    '<h3 class="rch3">Aperçu du rapport</h3><div class="tkpaper">' + ticketHtml(cxReportXml(cxD())) + '</div>' +
+    '<h3 class="rch3">Journal de la caisse</h3>' +
+    (journal || '<div class="sub">Aucune saisie ce jour-là.</div>') +
+    '<div class="sub">Les saisies faites dans l’App admin (Gestion sapin › Caisse) apparaissent ici avec la mention « Admin » ; seules celles de cette tablette peuvent être supprimées ici.</div>' +
+    '<h3 class="rch3">Aperçu du rapport</h3><div class="tkpaper">' + ticketHtml(cxReportXml(d)) + '</div>' +
     '</div></div>';
 }
 
@@ -1363,22 +1520,20 @@ var A = {
     if (!persist()) { S.storageMsg = 'Livraison NON enregistrée dans l\u2019appareil'; return; }
     if (prConfigured()) S.modal = 'ticket'; else toast(msg);
   },
-  cxOpen: function () { S.menu = false; S.cartOpen = false; S.modal = 'cx'; S.cxDate = today(); S.cxDone = null; S.cxDel = null; },
+  cxOpen: function () { S.menu = false; S.cartOpen = false; S.modal = 'cx'; S.cxDate = today(); S.cxDone = null; S.cxDel = null; cxSync().then(function () { cxRefresh(true); }); },
   fondOpen: function () { if (!S.cxDate || S.modal !== 'cx') S.cxDate = today(); var c = cxDay(cxD()), prop = cxD() === today() ? cxFondPropose() : null; S.cxFrom = S.modal === 'cx' ? 'cx' : null; S.modal = 'fond'; S.fondPrev = true; S.ccMode = 'total'; S.cc = {}; S.cxMontant = c && c.fond ? String(c.fond.montant).replace('.', ',') : prop != null ? String(prop).replace('.', ',') : ''; },
   ccMode: function (m) { S.ccMode = m; },
   fondPrevTog: function () { S.fondPrev = !S.fondPrev; },
   fondSave: function () {
     var amt = ccAmount(); if (!(amt >= 0)) return;
-    var c = cxEnsure(cxD()), first = !c.fond, isT = cxD() === today();
-    c.fond = { montant: amt, horodatage: isoLocal(new Date()), detail: S.ccMode === 'detail' ? Object.assign({}, S.cc) : null };
+    var d = cxD(), c = cxDay(d), first = !(c && c.fond), isT = d === today(), now = isoLocal(new Date()), det = S.ccMode === 'detail' ? Object.assign({}, S.cc) : null;
     var pd = S.fondPrev && isT ? cxPrevUncounted() : null, pmsg = '';
-    if (pd) { // comptage de la veille fait le matin, avec le fond
+    if (pd) { // comptage de la veille fait le matin, avec le fond : entrée dans le fichier de la veille
       var ps = cxSummary(pd), pec = r2(amt - ps.attendu);
-      cxEnsure(pd).comptages.push({ horodatage: c.fond.horodatage, montant: amt, detail: c.fond.detail, attendu: ps.attendu, ecart: pec, laisse: amt, viaFond: true });
-      delete S.exported[pd];
+      cxAdd(pd, { type: 'comptage', montant: amt, detail: det, attendu: ps.attendu, ecart: pec, laisse: amt, recette: 0, attenduApres: ps.attendu, viaFond: true, horodatage: now });
       pmsg = ' · caisse du ' + frDate(pd).slice(0, 5) + ' : ' + (Math.abs(pec) < 0.005 ? 'juste' : 'écart ' + signed(pec));
     }
-    if (!persist()) return;
+    cxAdd(d, { type: 'fond', montant: amt, detail: det, horodatage: now });
     if (first && isT && prConfigured()) drawerOpen('Fond de caisse', null);
     S.modal = S.cxFrom === 'cx' ? 'cx' : null; S.cxFrom = null; toast('Fond de caisse : ' + money(amt) + pmsg);
   },
@@ -1390,29 +1545,33 @@ var A = {
     if (!(amt > 0)) { S.cxMsg = 'Indiquez le montant.'; return; }
     if (!S.cxMotif || (S.cxMotif === 'Autre' && !(S.cxAutre || '').trim())) { S.cxMsg = 'Choisissez le motif.'; return; }
     var motif = S.cxMotif === 'Autre' ? 'Autre : ' + S.cxAutre.trim().slice(0, 80) : S.cxMotif, ret = S.cxType === 'retrait';
-    cxEnsure(cxD()).mouvements.push({ id: 'm' + Date.now().toString(36), type: S.cxType, montant: amt, motif: motif, horodatage: isoLocal(new Date()) });
-    if (!persist()) return;
+    cxAdd(cxD(), { type: S.cxType, montant: amt, detail: null, motif: motif, horodatage: isoLocal(new Date()) });
     if (cxD() === today() && prConfigured()) drawerOpen((ret ? 'Retrait' : 'Apport') + ' : ' + motif, null);
     S.modal = 'cx'; S.cxDone = { ok: true, text: (ret ? 'Retrait' : 'Apport') + ' de ' + money(amt) + ' enregistré (' + motif + ').' };
   },
   cxDelAsk: function (id) { S.cxDel = id; },
   cxDelNo: function () { S.cxDel = null; },
-  cxDelGo: function (id) { var c = cxDay(cxD()); if (!c) return; c.mouvements = c.mouvements.filter(function (m) { return m.id !== id; }); S.cxDel = null; persist(); S.cxDone = { ok: true, text: 'Mouvement supprimé.' }; },
+  cxDelGo: function (id) {
+    var e = cxEntries(cxD())[id]; S.cxDel = null; if (!e) return;
+    if (!cxOwn(e)) { S.cxDone = { ok: false, text: 'Cette saisie a été faite dans l’App admin : elle se corrige dans l’App admin.' }; return; }
+    cxRemove(cxD(), id); S.cxDone = { ok: true, text: 'Saisie supprimée.' };
+  },
   cptOpen: function () { S.cxMsg = null; S.modal = 'comptage'; S.ccMode = 'detail'; S.cc = {}; S.cxMontant = ''; S.cxLaisse = ''; if (cxD() === today() && prConfigured()) drawerOpen('Comptage de la caisse', null); },
+  cxLaisseSet: function (v) { S.cxLaisse = v === 'tout' ? String(ccAmount()).replace('.', ',') : '0'; S.cxMsg = null; },
   cptSave: function () {
-    var amt = ccAmount(), s = cxSummary(cxD()), ec = r2(amt - s.attendu), ls = (S.cxLaisse || '').trim(), laisse = ls ? r2(num(ls)) : null;
-    if (laisse != null && laisse > amt + 0.005) { S.cxMsg = 'Le montant laissé pour demain ne peut pas dépasser le montant compté (' + money(amt) + ').'; return; }
-    var now = isoLocal(new Date()), recette = laisse != null ? r2(amt - laisse) : 0, c = cxEnsure(cxD());
-    c.comptages.push({ horodatage: now, montant: amt, detail: S.ccMode === 'detail' ? Object.assign({}, S.cc) : null, attendu: s.attendu, ecart: ec, laisse: laisse, recette: recette, attenduApres: r2(s.attendu - recette) });
-    if (recette > 0.005) c.mouvements.push({ id: 'm' + Date.now().toString(36), type: 'retrait', montant: recette, motif: 'Recette de fin de journée', horodatage: now, auto: true });
-    if (!persist()) return;
+    var amt = ccAmount(), s = cxSummary(cxD()), ec = r2(amt - s.attendu), ls = (S.cxLaisse || '').trim();
+    if (!ls) { S.cxMsg = 'Indiquez ce que vous laissez en caisse pour demain (0 si vous retirez tout).'; return; }
+    var laisse = r2(num(ls));
+    if (laisse > amt + 0.005) { S.cxMsg = 'Le montant laissé pour demain ne peut pas dépasser le montant compté (' + money(amt) + ').'; return; }
+    var recette = r2(amt - laisse);
+    cxAdd(cxD(), { type: 'comptage', montant: amt, detail: S.ccMode === 'detail' ? Object.assign({}, S.cc) : null, attendu: s.attendu, ecart: ec, laisse: laisse, recette: recette, attenduApres: r2(s.attendu - recette), viaFond: false, horodatage: isoLocal(new Date()) });
     S.modal = 'cx'; S.cxMsg = null;
-    var rmsg = recette > 0.005 ? ' Recette de ' + money(recette) + ' notée comme retrait ; ' + money(laisse) + ' laissés en caisse.' : '';
+    var rmsg = ' Recette retirée : ' + money(recette) + ' ; laissé en caisse : ' + money(laisse) + '.';
     S.cxDone = Math.abs(ec) < 0.005 ? { ok: true, text: 'Caisse juste : ' + money(amt) + ', aucun écart.' + rmsg }
-      : { ok: false, text: 'Écart de ' + signed(ec) + ' (compté ' + money(amt) + ', attendu ' + money(s.attendu) + '). ' + (ec < 0 ? 'Il manque de l\u2019argent : vérifiez le comptage et les retraits.' : 'Il y a trop d\u2019argent : une vente n\u2019a peut-être pas été encodée, ou un apport n\u2019a pas été noté.') + rmsg };
+      : { ok: false, text: 'Écart de ' + signed(ec) + ' (compté ' + money(amt) + ', attendu ' + money(s.attendu) + '). ' + (ec < 0 ? 'Il manque de l’argent : vérifiez le comptage et les retraits.' : 'Il y a trop d’argent : une vente n’a peut-être pas été encodée, ou un apport n’a pas été noté.') + rmsg };
   },
   cxPrint: function () { cxPrint(cxD()); },
-  cxDay: function (d) { S.cxDate = d; S.cxDone = null; S.cxDel = null; },
+  cxDay: function (d) { S.cxDate = d; S.cxDone = null; S.cxDel = null; cxRefresh(true); },
   histDeliv: function (id) {
     var d = deliveryProduct(), o = findSale(id); if (!d || !o || o.v.annulation || linkedDelivery(id)) return;
     S.savedCart = { cart: S.cart, ticketDisc: S.ticketDisc };
@@ -1594,7 +1753,7 @@ var A = {
   askDel: function (d) { S.confirmDel = d; },
   delDay: function (d) {
     if (d === today() || !S.exported[d]) return;
-    delete S.days[d]; delete S.exported[d]; delete S.caisse[d]; S.confirmDel = null;
+    delete S.days[d]; delete S.exported[d]; delete S.caisse[d]; if (!CXF.queue.some(function (o) { return o.date === d; })) { delete CXF.snap[d]; saveCxf(); } S.confirmDel = null;
     if (persist()) toast('Ventes du ' + frDate(d) + ' effacées de l\u2019appareil');
   }
 };
@@ -1899,18 +2058,20 @@ function vMenu() {
     return '<button class="mtile" data-a="' + a + '"' + (extra || '') + '>' + icon + '<span class="mt-l">' + label + '</span>' + (sub ? '<span class="mt-s">' + sub + '</span>' : '') + '</button>';
   }
   var cs = cxSummary();
-  var ventes = tile('cxOpen', MI.cash, 'Caisse du jour', cs.comptage && Math.abs(cxDelta(today())) >= 0.005 ? 'À recompter' : cs.comptage ? 'Comptée · écart ' + signed(cs.comptage.ecart) : cs.fond == null ? 'Fond de caisse à saisir' : 'Attendu : ' + money(cs.attendu)) +
-    tile('download', MI.down, 'Exporter les ventes du jour', 'Fichier à garder ou partager') +
+  /* Ordre voulu (3 par ligne sur tablette) : Envoyer maintenant, Caisse du jour, Ventes des jours précédents /
+     Vérifier le catalogue, Stock du stand, Réception de stock / Aperçu du ticket (+ Ouvrir le tiroir si imprimante) */
+  var tiles =
+    (ghConfigured() ? (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '')
+      : tile('openGh', MI.up, 'Envoyer maintenant', 'Verrouillé : toucher pour déverrouiller')) : '') +
+    tile('cxOpen', MI.cash, 'Caisse du jour', cs.comptage && Math.abs(cxDelta(today())) >= 0.005 ? 'À recompter' : cs.comptage ? 'Comptée · écart ' + signed(cs.comptage.ecart) : cs.fond == null ? 'Fond de caisse à saisir' : 'Attendu : ' + money(cs.attendu)) +
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
-    tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
-    (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '') +
+    tile('checkCatMenu', MI.refresh, S.catLoading ? 'Vérification…' : 'Vérifier le catalogue', S.siteUpdate ? 'Mise à jour disponible' : 'Installé : v' + CATALOGUE.version, S.siteUpdate ? ' style="border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)"' : '') +
     (ghConfigured() ? tile('stkShow', MI.chart, 'Stock du stand', STKC.at && STKC.place === S.placeId ? 'Calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) : 'Restant par article') : '') +
     (ghConfigured() ? tile('rcOpen', MI.box, 'Réception de stock', STK.queue.length ? STK.queue.length + ' en attente d\u2019envoi' : 'Articles venus d\u2019un autre stand') : '') +
-    (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
-  var catalogue = tile('checkCatMenu', MI.refresh, S.catLoading ? 'Vérification…' : 'Vérifier le catalogue', S.siteUpdate ? 'Mise à jour disponible' : 'Installé : v' + CATALOGUE.version, S.siteUpdate ? ' style="border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)"' : '');
+    tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
+    (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '');
   return '<div class="menu-back" data-a="toggleMenu"></div><div class="menu tiles" role="menu">' +
-    '<div class="mgroup">Ventes</div><div class="mgrid">' + ventes + '</div>' +
-    '<div class="mgroup">Catalogue</div><div class="mgrid">' + catalogue + '</div>' +
+    '<div class="mgrid m3">' + tiles + '</div>' +
     '<button class="mhome" data-a="goHome">' + MI.home + '<span>Retour à l\u2019accueil</span><span class="mt-s">Paramètres de la tablette</span></button>' +
     '<div class="meta">' + catalogueLabel(CATALOGUE) + '</div></div>';
 }
@@ -2202,6 +2363,9 @@ render();
 loadSiteCatalogue(false);
 autoSchedule(5000);
 if (prConfigured()) setTimeout(prCheck, 1500);
+// Fichier de caisse partagé : reprise des anciennes saisies (une fois), puis envoi / lecture
+cxMigrate(); render();
+setTimeout(function () { cxSync().then(function () { cxRefresh(true); }); }, 3000);
 // Stock du stand : calcul au démarrage, au retour du réseau et toutes les 15 minutes (lecture seule, sans message)
 setTimeout(function () { stkcRefresh(false); }, 4000);
 window.addEventListener('online', function () { setTimeout(function () { stkcRefresh(false); }, 3000); });

@@ -114,14 +114,20 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - En dessous : les transferts reçus par ce stand pendant la saison (Admin ou caisse). Une tablette peut **supprimer** un transfert qu'elle a créé elle-même (relecture, suppression de la clé, PUT avec `sha`) ; les autres corrections se font dans l'App admin.
 - Mémoire de la tablette : seulement la file d'attente et les 60 derniers transferts reçus (clé `agrigarden-caisse-stock`).
 
+## Menu ⋮
+
+Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Aperçu du ticket**, **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
+
 ## Caisse du jour : fond de caisse, retraits, comptage
+
+**Fichier de caisse partagé avec l'App admin (v30)** : le fond, les retraits, les apports et les comptages sont enregistrés dans `sapin/caisse/AAAA-MM-JJ_<pdvId>.json` du dépôt des ventes (format `agri-garden-caisse/caisse`, `entrees` indexées par identifiant, `source` caisse / admin). Les mêmes saisies peuvent être faites dans l'App admin (Gestion sapin › Caisse) : elles apparaissent ici avec la mention **Admin** (Journal de la caisse). La tablette n'écrit et ne supprime que ses propres saisies (relecture, ajout ou retrait d'une entrée, enregistrement avec le sha ; 3 essais en cas de conflit). Hors ligne ou appareil verrouillé : file d'attente, envoi avec l'envoi automatique (≈ 15 s après une saisie, retour du réseau, démarrage, premier plan) ; le fichier est relu à l'ouverture de Caisse du jour, au démarrage et à chaque passage de l'envoi automatique. Un nouveau fond remplace le précédent (le plus récent fait foi). La recette d'un comptage (compté − laissé) est dans le comptage (plus de retrait séparé) ; **« Laisser en caisse pour demain » est obligatoire** (boutons « Tout retirer (0 €) » et « Tout laisser »). Les saisies faites avant la v30 sont reprises automatiquement dans le fichier partagé, sans doublon. Comptage par billets et pièces : de 500 € à 5 cents (pas de pièces de 1 et 2 cents).
 
 **⋮ → Caisse du jour** (la tuile rappelle « Fond de caisse à saisir », l'argent attendu, ou l'écart du comptage).
 - **Fond de caisse** : demandé à la première ouverture de la caisse de la journée (« Plus tard » possible ; à saisir ensuite dans Caisse du jour). Montant total ou détail **billets et pièces**. Proposé automatiquement : le montant « laissé en caisse pour demain » au dernier comptage. Le tiroir s'ouvre pour y mettre l'argent.
 - **Retrait** (− Retrait : dépôt au coffre, remboursement client, dépense, autre) et **apport** (+ Apport : ajout de monnaie, autre) en cours de journée : montant + motif obligatoire ; le tiroir s'ouvre (journal du tiroir : « Retrait : Dépôt au coffre »…). Un retrait ou apport encodé par erreur peut être supprimé.
 - **Attendu en caisse** = fond + ventes payées en cash ce jour-là + apports − retraits. Les ventes annulées ne comptent pas ; la part cash d'une livraison ajoutée après coup compte le jour où elle est encaissée. Le Bancontact du jour est rappelé (hors tiroir).
 - **Compter la caisse** (fin de journée, ou à tout moment) : le tiroir s'ouvre ; saisie par billets et pièces (Entrée = ligne suivante) ou montant total ; compté, attendu et **écart** en direct (vert si juste, rouge sinon) ; « Laisser en caisse pour demain » (facultatif) devient le fond proposé le lendemain. On peut recompter : le dernier comptage fait foi.
-- **Recette sortie du tiroir** : au comptage, si « Laisser en caisse pour demain » est rempli, la différence (compté − laissé) est notée automatiquement comme retrait « Recette de fin de journée » ; l'attendu tombe au montant laissé. Le laissé ne peut pas dépasser le compté.
+- **Recette sortie du tiroir** : au comptage, la différence (compté − laissé) est la recette, notée dans le comptage ; l'attendu tombe au montant laissé. Le laissé est obligatoire et ne peut pas dépasser le compté.
 - **Ventes après le comptage** : si de l'argent entre ou sort après le dernier comptage (vente cash, retrait, apport, fond modifié), Caisse du jour affiche « Depuis le comptage de 18:00 : +40,00 € en cash… Recomptez la caisse » et la tuile indique « À recompter ». L'écart affiché est celui « au comptage ».
 - **Fond proposé le lendemain** : argent estimé dans le tiroir à la fermeture = laissé (ou compté) au dernier comptage + cash entré ou sorti après ce comptage.
 - **Compter le lendemain** (deux possibilités) :
@@ -158,11 +164,11 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v28';` → `'v29'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v30';` → `'v31'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
-- Avec l'envoi automatique actif, vérifiez de temps en temps le bandeau ☁ (pas orange ni rouge). Sans envoi GitHub, exportez les ventes au moins **deux fois par jour** (midi et soir) : menu **⋮ → Exporter les ventes du jour**.
+- Avec l'envoi automatique actif, vérifiez de temps en temps le bandeau ☁ (pas orange ni rouge). Sans envoi GitHub, exportez les ventes au moins **deux fois par jour** (midi et soir) : menu **⋮ → Ventes des jours précédents → Télécharger** (ligne du jour).
 - Pour retélécharger le fichier d'un jour précédent : menu **⋮ → Ventes des jours précédents → Télécharger**.
 - N'effacez jamais les données de Chrome sur les tablettes de caisse.
 - **Mémoire de l'appareil** (environ 5 Mo, partagés avec les autres caisses du même compte GitHub) : la jauge est dans **⋮ → Ventes des jours précédents**. Au-delà de 80 %, un bandeau orange s'affiche : effacez alors les anciens jours. Un jour ne peut être effacé qu'après avoir été téléchargé ou envoyé, et jamais le jour en cours.
