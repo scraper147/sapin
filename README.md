@@ -121,8 +121,11 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - **Retrait** (− Retrait : dépôt au coffre, remboursement client, dépense, autre) et **apport** (+ Apport : ajout de monnaie, autre) en cours de journée : montant + motif obligatoire ; le tiroir s'ouvre (journal du tiroir : « Retrait : Dépôt au coffre »…). Un retrait ou apport encodé par erreur peut être supprimé.
 - **Attendu en caisse** = fond + ventes payées en cash ce jour-là + apports − retraits. Les ventes annulées ne comptent pas ; la part cash d'une livraison ajoutée après coup compte le jour où elle est encaissée. Le Bancontact du jour est rappelé (hors tiroir).
 - **Compter la caisse** (fin de journée, ou à tout moment) : le tiroir s'ouvre ; saisie par billets et pièces (Entrée = ligne suivante) ou montant total ; compté, attendu et **écart** en direct (vert si juste, rouge sinon) ; « Laisser en caisse pour demain » (facultatif) devient le fond proposé le lendemain. On peut recompter : le dernier comptage fait foi.
+- **Recette sortie du tiroir** : au comptage, si « Laisser en caisse pour demain » est rempli, la différence (compté − laissé) est notée automatiquement comme retrait « Recette de fin de journée » ; l'attendu tombe au montant laissé. Le laissé ne peut pas dépasser le compté.
+- **Ventes après le comptage** : si de l'argent entre ou sort après le dernier comptage (vente cash, retrait, apport, fond modifié), Caisse du jour affiche « Depuis le comptage de 18:00 : +40,00 € en cash… Recomptez la caisse » et la tuile indique « À recompter ». L'écart affiché est celui « au comptage ».
+- **Fond proposé le lendemain** : argent estimé dans le tiroir à la fermeture = laissé (ou compté) au dernier comptage + cash entré ou sorti après ce comptage.
 - **Compter le lendemain** (deux possibilités) :
-  - *Avec le fond du matin* : si la dernière journée n'a pas été comptée, la fenêtre « Fond de caisse » le signale et propose (coché par défaut) « Compter aussi comme fin de journée du jj/mm » : le montant saisi devient le comptage de cette journée (écart calculé) et le fond du jour. À décocher si quelqu'un a touché au tiroir depuis la fermeture.
+  - *Avec le fond du matin* : si la dernière journée n'a pas été comptée (ou a changé depuis son comptage), la fenêtre « Fond de caisse » le signale et propose (coché par défaut) « Compter aussi comme fin de journée du jj/mm » : le montant saisi devient le comptage de cette journée (écart calculé) et le fond du jour. À décocher si quelqu'un a touché au tiroir depuis la fermeture.
   - *Choix du jour* : en haut de **Caisse du jour**, les jours gardés sur la tablette (« à compter » en rouge s'ils ne sont pas comptés). Pour un jour passé : fond, retraits / apports, comptage et rapport après coup (le tiroir ne s'ouvre pas ; l'heure réelle est notée, « Compté le 19/11 à 08:10 »).
 - **Rapport de caisse** : aperçu dans Caisse du jour, et **Imprimer le rapport** si une imprimante est configurée (ventes, cash / Bancontact, fond, retraits et apports, attendu, compté, écart, détail du comptage, ouvertures du tiroir sans vente).
 - Tout est enregistré dans le fichier du jour (champ `caisse` : fondDeCaisse, ventesCash, apports, retraits, attendu, compte, ecart, laissePourDemain, et le détail) et envoyé sur GitHub avec les ventes.
@@ -155,7 +158,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v27';` → `'v28'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v28';` → `'v29'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 

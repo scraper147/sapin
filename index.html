@@ -330,12 +330,13 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .cxprev .rcchip{align-self:flex-start;height:auto;min-height:44px;padding:8px 16px;text-align:left}
 .cxdays{display:flex;flex-wrap:wrap;gap:8px}
 .cxdays .todo{font-size:12px;font-weight:800;color:var(--red);margin-left:4px}
+.rcmodal>*{flex-shrink:0}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v27'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v28'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -919,7 +920,7 @@ function vCxDays() {
   var t = today(), ds = [t].concat(Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }), Object.keys(S.caisse)).filter(function (d, i, a) { return d <= t && a.indexOf(d) === i; }).sort().reverse();
   if (ds.length < 2) return '';
   return '<div class="hdays cxdays">' + ds.map(function (d) {
-    var c = cxDay(d), todo = d !== t && !(c && (c.comptages || []).length);
+    var todo = d !== t && cxNeedsCount(d);
     return '<button class="choice' + (d === cxD() ? ' on' : '') + '" data-a="cxDay" data-v="' + d + '">' + (d === t ? 'Aujourd\u2019hui' : frDate(d).slice(0, 5)) + (todo ? ' <span class="todo">à compter</span>' : '') + '</button>';
   }).join('') + '</div>';
 }
@@ -950,15 +951,29 @@ function cxSummary(d) {
 function cxFondPropose(d) {
   d = d || today();
   var prev = Object.keys(S.caisse).filter(function (x) { return x < d; }).sort().reverse();
-  for (var i = 0; i < prev.length; i++) { var k = (S.caisse[prev[i]].comptages || []).slice(-1)[0]; if (k && k.laisse != null) return k.laisse; }
+  for (var i = 0; i < prev.length; i++) {
+    var k = (S.caisse[prev[i]].comptages || []).slice(-1)[0];
+    if (k) return r2((k.laisse != null ? k.laisse : k.montant) + (cxDelta(prev[i]) || 0)); // argent laissé + cash encaissé (ou sorti) après le comptage
+  }
   return null;
+}
+/* Écart d'argent liquide depuis le dernier comptage (ventes cash, retraits, apports, fond modifié) : null si pas de comptage */
+function cxDelta(d) {
+  var c = cxDay(d), k = c && (c.comptages || []).slice(-1)[0]; if (!k) return null;
+  return r2(cxSummary(d).attendu - (k.attenduApres != null ? k.attenduApres : k.attendu));
+}
+/* Jour à compter : activité sans comptage, ou de l'argent entré / sorti après le dernier comptage */
+function cxNeedsCount(d) {
+  var c = cxDay(d), has = (S.days[d] || []).length || (c && (c.fond || (c.mouvements || []).length));
+  if (!has) return false;
+  var dl = cxDelta(d); return dl === null || Math.abs(dl) >= 0.005;
 }
 /* Jour précédent pas compté (le plus récent avant aujourd'hui avec des ventes ou un fond) : le fond du matin peut servir de comptage */
 function cxPrevUncounted() {
   var t = today(), ds = Object.keys(S.days).filter(function (d) { return (S.days[d] || []).length; }).concat(Object.keys(S.caisse).filter(function (d) { return S.caisse[d].fond; }))
     .filter(function (d, i, a) { return d < t && a.indexOf(d) === i; }).sort();
   var d = ds.pop(); if (!d) return null;
-  var c = cxDay(d); return c && (c.comptages || []).length ? null : d;
+  return cxNeedsCount(d) ? d : null;
 }
 function cxExport(d) {
   var c = cxDay(d); if (!c) return null;
@@ -1021,14 +1036,15 @@ function ccAmount() { return S.ccMode === 'detail' ? ccTotal(S.cc) : r2(num(S.cx
 function vFond() {
   var isT = cxD() === today(), prop = isT ? cxFondPropose() : null, c = cxDay(cxD());
   return '<div class="overlay"><div class="modal rcmodal" data-keep="fond"><div class="row"><h2>Fond de caisse</h2><button class="btn" data-a="close">' + (c && c.fond ? 'Fermer' : 'Plus tard') + '</button></div>' +
-    '<div class="sub">Argent présent dans le tiroir à l’ouverture du ' + frDate(cxD()) + (prop != null ? '. Laissé au dernier comptage : <strong>' + money(prop) + '</strong>.' : '.') + '</div>' +
+    '<div class="sub">Argent présent dans le tiroir à l’ouverture du ' + frDate(cxD()) + (prop != null ? '. Estimé dans le tiroir à la dernière fermeture : <strong>' + money(prop) + '</strong>.' : '.') + '</div>' +
     '<div class="seg" style="align-self:flex-start"><button class="' + (S.ccMode !== 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="total">Montant total</button><button class="' + (S.ccMode === 'detail' ? 'on' : '') + '" data-a="ccMode" data-v="detail">Billets et pièces</button></div>' +
     (function () { var pd = isT ? cxPrevUncounted() : null; if (!pd) return ''; var ps = cxSummary(pd);
-      return '<div class="cxprev"><div><strong>La caisse du ' + frDate(pd).slice(0, 5) + ' n\u2019a pas été comptée.</strong> Attendu en fin de journée : ' + money(ps.attendu) + '.</div>' +
+      var pk = (cxDay(pd).comptages || []).slice(-1)[0], pdl = cxDelta(pd);
+      return '<div class="cxprev"><div><strong>' + (pk ? 'La caisse du ' + frDate(pd).slice(0, 5) + ' a changé depuis son comptage de ' + pk.horodatage.slice(11, 16) + ' (' + signed(pdl) + ' en cash).' : 'La caisse du ' + frDate(pd).slice(0, 5) + ' n\u2019a pas été comptée.') + '</strong> Attendu en fin de journée : ' + money(ps.attendu) + '.</div>' +
         '<button class="rcchip' + (S.fondPrev ? ' on' : '') + '" data-a="fondPrevTog">' + (S.fondPrev ? '✓ ' : '') + 'Compter aussi comme fin de journée du ' + frDate(pd).slice(0, 5) + '</button>' +
         '<div class="sub">À laisser coché si personne n\u2019a touché au tiroir depuis la fermeture : le montant saisi devient le comptage du ' + frDate(pd).slice(0, 5) + ' (avec son écart) et le fond d\u2019aujourd\u2019hui.</div></div>'; })() +
     (S.ccMode === 'detail' ? vCcGrid() : '<label class="f">Montant (€)<input type="text" inputmode="decimal" data-f="cxMontant" value="' + esc(S.cxMontant) + '" placeholder="0,00" autocomplete="off"></label>') +
-    '<div class="rcfoot"><span class="rctot">Fond : <span id="ccTot">' + money(ccAmount()) + '</span></span><button class="btn btn-primary" data-a="fondSave">Enregistrer le fond</button></div></div></div>';
+    (S.cxMsg && S.modal === 'fond' ? '' : '') + '<div class="rcfoot"><span class="rctot">Fond : <span id="ccTot">' + money(ccAmount()) + '</span></span><button class="btn btn-primary" data-a="fondSave">Enregistrer le fond</button></div></div></div>';
 }
 function vCxMv() {
   var ret = S.cxType === 'retrait', motifs = ret ? RETRAIT_MOTIFS : APPORT_MOTIFS, s = cxSummary(cxD());
@@ -1048,6 +1064,8 @@ function vComptage() {
     (S.ccMode === 'detail' ? vCcGrid() : '<label class="f">Montant compté (€)<input type="text" inputmode="decimal" data-f="cxMontant" value="' + esc(S.cxMontant) + '" placeholder="0,00" autocomplete="off"></label>') +
     '<div class="cxres"><div><span class="sub">Compté</span><strong id="ccTot">' + money(amt) + '</strong></div><div><span class="sub">Attendu</span><strong>' + money(s.attendu) + '</strong></div><div><span class="sub">Écart</span><strong id="ccEc" class="' + (Math.abs(ec) < 0.005 ? 'okc' : 'koc') + '">' + signed(ec) + '</strong></div></div>' +
     '<label class="f">Laisser en caisse pour demain (€, facultatif)<input type="text" inputmode="decimal" data-f="cxLaisse" value="' + esc(S.cxLaisse) + '" placeholder="Fond de demain" autocomplete="off"></label>' +
+    '<div class="sub">Le reste (la recette sortie du tiroir) est noté automatiquement comme retrait « Recette de fin de journée ».</div>' +
+    (S.cxMsg ? '<div class="rcmsg warn">' + esc(S.cxMsg) + '</div>' : '') +
     '<div class="actions"><button class="btn" data-a="cxBack">Annuler</button><button class="btn btn-primary" data-a="cptSave">Enregistrer le comptage</button></div></div></div>';
 }
 function vCaisseDuJour() {
@@ -1056,13 +1074,14 @@ function vCaisseDuJour() {
   return '<div class="overlay"><div class="modal rcmodal" data-keep="cx"><div class="row"><h2>' + (cxD() === today() ? 'Caisse du jour' : 'Caisse du ' + frDate(cxD()).slice(0, 5)) + '</h2><button class="btn" data-a="close">Fermer</button></div>' +
     vCxDays() + '<div class="sub">' + frDate(cxD()) + ' · argent liquide du tiroir. Bancontact du jour : ' + money(bc) + ' (hors tiroir).</div>' +
     (S.cxDone ? '<div class="rcmsg ' + (S.cxDone.ok ? 'ok' : 'warn') + '">' + esc(S.cxDone.text) + '</div>' : '') +
+    (function () { var dl = cxDelta(cxD()); if (dl === null || Math.abs(dl) < 0.005) return ''; return '<div class="rcstat ko">Depuis le comptage de ' + k.horodatage.slice(11, 16) + ' : ' + signed(dl) + ' en cash (ventes, retraits, apports ou fond modifié). Recomptez la caisse.</div>'; })() +
     '<div class="cxsum">' +
       line('Fond de caisse', s.fond == null ? '<em>non saisi</em>' : money(s.fond), '', ' <button class="small" data-a="fondOpen">' + (s.fond == null ? 'Saisir' : 'Modifier') + '</button>') +
       line('+ Ventes en cash', money(s.ventes)) +
       (s.apports ? line('+ Apports', money(s.apports)) : '') +
       (s.retraits ? line('− Retraits', money(s.retraits)) : '') +
       line('= Attendu en caisse', money(s.attendu), 'tot') +
-      (k ? line((k.horodatage.slice(0, 10) !== cxD() ? 'Compté le ' + frDate(k.horodatage).slice(0, 5) + ' à ' : 'Compté à ') + k.horodatage.slice(11, 16), money(k.montant)) + line('Écart', signed(k.ecart), Math.abs(k.ecart) < 0.005 ? 'okl' : 'kol') + (k.laisse != null ? line('Laissé pour demain', money(k.laisse)) : '') : '') +
+      (k ? line((k.horodatage.slice(0, 10) !== cxD() ? 'Compté le ' + frDate(k.horodatage).slice(0, 5) + ' à ' : 'Compté à ') + k.horodatage.slice(11, 16), money(k.montant)) + line('Écart au comptage', signed(k.ecart), Math.abs(k.ecart) < 0.005 ? 'okl' : 'kol') + (k.laisse != null ? line('Laissé pour demain', money(k.laisse)) : '') : '') +
     '</div>' +
     '<div class="cxbtns"><button class="btn" data-a="cxMvOpen" data-v="retrait">− Retrait</button><button class="btn" data-a="cxMvOpen" data-v="apport">+ Apport</button><button class="btn btn-primary" data-a="cptOpen">' + (k ? 'Recompter la caisse' : 'Compter la caisse') + '</button></div>' +
     (prConfigured() ? '<div class="actions" style="justify-content:flex-start"><button class="btn" data-a="cxPrint"' + (S.prBusy ? ' disabled' : '') + '>Imprimer le rapport</button></div>' : '') +
@@ -1379,14 +1398,18 @@ var A = {
   cxDelAsk: function (id) { S.cxDel = id; },
   cxDelNo: function () { S.cxDel = null; },
   cxDelGo: function (id) { var c = cxDay(cxD()); if (!c) return; c.mouvements = c.mouvements.filter(function (m) { return m.id !== id; }); S.cxDel = null; persist(); S.cxDone = { ok: true, text: 'Mouvement supprimé.' }; },
-  cptOpen: function () { S.modal = 'comptage'; S.ccMode = 'detail'; S.cc = {}; S.cxMontant = ''; S.cxLaisse = ''; if (cxD() === today() && prConfigured()) drawerOpen('Comptage de la caisse', null); },
+  cptOpen: function () { S.cxMsg = null; S.modal = 'comptage'; S.ccMode = 'detail'; S.cc = {}; S.cxMontant = ''; S.cxLaisse = ''; if (cxD() === today() && prConfigured()) drawerOpen('Comptage de la caisse', null); },
   cptSave: function () {
-    var amt = ccAmount(), s = cxSummary(cxD()), ec = r2(amt - s.attendu), ls = (S.cxLaisse || '').trim();
-    cxEnsure(cxD()).comptages.push({ horodatage: isoLocal(new Date()), montant: amt, detail: S.ccMode === 'detail' ? Object.assign({}, S.cc) : null, attendu: s.attendu, ecart: ec, laisse: ls ? r2(num(ls)) : null });
+    var amt = ccAmount(), s = cxSummary(cxD()), ec = r2(amt - s.attendu), ls = (S.cxLaisse || '').trim(), laisse = ls ? r2(num(ls)) : null;
+    if (laisse != null && laisse > amt + 0.005) { S.cxMsg = 'Le montant laissé pour demain ne peut pas dépasser le montant compté (' + money(amt) + ').'; return; }
+    var now = isoLocal(new Date()), recette = laisse != null ? r2(amt - laisse) : 0, c = cxEnsure(cxD());
+    c.comptages.push({ horodatage: now, montant: amt, detail: S.ccMode === 'detail' ? Object.assign({}, S.cc) : null, attendu: s.attendu, ecart: ec, laisse: laisse, recette: recette, attenduApres: r2(s.attendu - recette) });
+    if (recette > 0.005) c.mouvements.push({ id: 'm' + Date.now().toString(36), type: 'retrait', montant: recette, motif: 'Recette de fin de journée', horodatage: now, auto: true });
     if (!persist()) return;
-    S.modal = 'cx';
-    S.cxDone = Math.abs(ec) < 0.005 ? { ok: true, text: 'Caisse juste : ' + money(amt) + ', aucun écart.' }
-      : { ok: false, text: 'Écart de ' + signed(ec) + ' (compté ' + money(amt) + ', attendu ' + money(s.attendu) + '). ' + (ec < 0 ? 'Il manque de l\u2019argent : vérifiez le comptage et les retraits.' : 'Il y a trop d\u2019argent : une vente n\u2019a peut-être pas été encodée, ou un apport n\u2019a pas été noté.') };
+    S.modal = 'cx'; S.cxMsg = null;
+    var rmsg = recette > 0.005 ? ' Recette de ' + money(recette) + ' notée comme retrait ; ' + money(laisse) + ' laissés en caisse.' : '';
+    S.cxDone = Math.abs(ec) < 0.005 ? { ok: true, text: 'Caisse juste : ' + money(amt) + ', aucun écart.' + rmsg }
+      : { ok: false, text: 'Écart de ' + signed(ec) + ' (compté ' + money(amt) + ', attendu ' + money(s.attendu) + '). ' + (ec < 0 ? 'Il manque de l\u2019argent : vérifiez le comptage et les retraits.' : 'Il y a trop d\u2019argent : une vente n\u2019a peut-être pas été encodée, ou un apport n\u2019a pas été noté.') + rmsg };
   },
   cxPrint: function () { cxPrint(cxD()); },
   cxDay: function (d) { S.cxDate = d; S.cxDone = null; S.cxDel = null; },
@@ -1876,7 +1899,7 @@ function vMenu() {
     return '<button class="mtile" data-a="' + a + '"' + (extra || '') + '>' + icon + '<span class="mt-l">' + label + '</span>' + (sub ? '<span class="mt-s">' + sub + '</span>' : '') + '</button>';
   }
   var cs = cxSummary();
-  var ventes = tile('cxOpen', MI.cash, 'Caisse du jour', cs.comptage ? 'Comptée · écart ' + signed(cs.comptage.ecart) : cs.fond == null ? 'Fond de caisse à saisir' : 'Attendu : ' + money(cs.attendu)) +
+  var ventes = tile('cxOpen', MI.cash, 'Caisse du jour', cs.comptage && Math.abs(cxDelta(today())) >= 0.005 ? 'À recompter' : cs.comptage ? 'Comptée · écart ' + signed(cs.comptage.ecart) : cs.fond == null ? 'Fond de caisse à saisir' : 'Attendu : ' + money(cs.attendu)) +
     tile('download', MI.down, 'Exporter les ventes du jour', 'Fichier à garder ou partager') +
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
     tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
