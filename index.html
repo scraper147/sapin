@@ -292,12 +292,41 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .phone .menu.tiles .mgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .phone .menu.tiles .mtile{min-height:104px;padding:12px}
 .phone .menu.tiles .mhome .mt-s{display:none}
+.rcmodal{width:min(720px,96vw) !important;max-height:92%}
+.rcbox{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;background:var(--ground);border-radius:12px;padding:12px}
+.rcbox div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rcbox strong{font-size:17px;overflow-wrap:anywhere}
+.rcchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.rcchip{height:48px;padding:0 18px;border:1px solid var(--line2);border-radius:24px;background:var(--surface);font-size:17px;font-weight:700;color:var(--text)}
+.rcchip.on{background:var(--green);border-color:var(--green);color:var(--on-green);font-weight:800}
+.rclist{display:flex;flex-direction:column}
+.rccat{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--green);padding:14px 0 4px}
+.rcrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--soft);font-size:17px}
+.rcrow span{min-width:0;overflow-wrap:anywhere}
+.rcrow input{width:96px;flex-shrink:0;height:48px;border:1px solid var(--line2);border-radius:10px;padding:0 12px;font-size:20px;font-weight:700;text-align:right;color:var(--text);background:var(--surface)}
+.rcfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:6px}
+.rctot{font-size:18px;font-weight:800}
+.rcstat,.rcmsg{border-radius:10px;padding:10px 14px;font-size:15px;font-weight:600;background:var(--soft);color:var(--muted)}
+.rcstat.ok{color:var(--green)}
+.rcstat.warn,.rcmsg.warn{background:var(--warn-bg);color:var(--warn-text)}
+.rcstat.ko{background:var(--warn-bg);color:var(--red)}
+.rcmsg.ok{background:var(--tint);color:var(--green)}
+.rch3{margin:8px 0 0;font-size:19px;font-weight:800}
+.rchist{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.rch-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px}
+.rch-l{font-size:15px;overflow-wrap:anywhere}
+.rch-a{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rcwait{color:var(--warn-text)}
+.phone .rcbox{grid-template-columns:1fr 1fr}
+.phone .rcfoot .btn{width:100%}
+.phone .rcrow input{width:84px}
+.rcrow input::placeholder{color:var(--line2);font-weight:400}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v17'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v18'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 /* Menu ⋮ « Gérer le catalogue » (désactiver des articles, changer un prix sur l'appareil). false pour la caisse sapins :
    tuile masquée et réglages déjà faits sur l'appareil ignorés (le catalogue de l'app Admin fait foi). */
@@ -594,6 +623,7 @@ function daysToSend() {
 function autoSchedule(delay) { if (!ghConfigured()) return; clearTimeout(AUTO.timer); AUTO.timer = setTimeout(autoSync, delay); }
 async function autoSync() {
   if (!ghReady() || S.ghBusy || navigator.onLine === false) return;
+  stkSync(); // mouvements de stock en attente (file séparée)
   var todo = daysToSend(); if (!todo.length) return;
   var wait = AUTO.last + AUTO_MIN_INTERVALLE - Date.now();
   if (wait > 0 && !AUTO.err) { autoSchedule(wait); return; }
@@ -607,12 +637,17 @@ function autoStatus() {
   if (!ghConfigured()) return null;
   if (!ghReady()) return { ko: true, court: 'Envoi auto inactif', t: 'Envoi automatique inactif : touchez pour déverrouiller GitHub' };
   if (S.ghBusy === 'auto') return { court: 'Envoi…', t: 'Envoi automatique en cours…' };
-  var n = daysToSend().length, last = Object.keys(GH.envois).map(function (k) { return GH.envois[k]; }).sort().pop();
+  var n = daysToSend().length, nq = typeof STK !== 'undefined' ? STK.queue.length : 0, last = Object.keys(GH.envois).map(function (k) { return GH.envois[k]; }).sort().pop();
   if (n) {
     if (navigator.onLine === false) return { warn: true, court: 'En attente de réseau', t: 'Pas de réseau : ' + n + ' jour' + (n > 1 ? 's' : '') + ' à envoyer dès le retour d\u2019internet' };
     if (AUTO.err === 401) return { ko: true, court: 'Envoi auto inactif', t: 'GitHub refuse le jeton : touchez pour déverrouiller à nouveau' };
     if (AUTO.err != null) return { warn: true, court: 'Nouvel essai bientôt', t: 'Dernier envoi automatique échoué (' + ghError(AUTO.err) + ') : nouvel essai automatique' };
     return { court: 'Envoi prévu', t: 'Envoi automatique dans quelques instants' };
+  }
+  if (nq) {
+    if (navigator.onLine === false) return { warn: true, court: 'En attente de réseau', t: 'Pas de réseau : ' + stkPendingText() + ' à envoyer dès le retour d\u2019internet' };
+    if (STK.err != null && STK.err !== 'pasmien') return { warn: true, court: 'Nouvel essai bientôt', t: 'Stock : ' + stkErrText(STK.err) };
+    return { court: 'Envoi prévu', t: 'Envoi automatique dans quelques instants (' + stkPendingText() + ')' };
   }
   return { ok: true, court: last ? 'À jour ' + last.slice(11, 16) : 'À jour', t: last ? 'Envoi automatique : à jour (dernier envoi le ' + frDate(last).slice(0, 5) + ' à ' + last.slice(11, 16) + ')' : 'Envoi automatique actif : rien à envoyer' };
 }
@@ -644,6 +679,137 @@ async function ghTest() {
   } catch (e) { S.ghMsg = { ok: false, text: ghError(typeof e === 'number' ? e : 0) }; }
   render();
 }
+
+/* ---------- Stock : réception d'articles venus d'un autre stand ----------
+   Le stock de la saison est géré par l'App admin dans le dépôt des ventes : <GH_DOSSIER>/stock/<saison>.json
+   (format agri-garden-caisse/stock). La caisse y AJOUTE seulement ses transferts « vers son stand » :
+   relecture du fichier, ajout d'une clé dans `mouvements` (objet indexé par identifiant), PUT avec le sha lu.
+   Jamais de réécriture depuis une copie locale. Hors ligne ou appareil verrouillé : file d'attente sur la tablette. */
+var STOCK_DIR = GH_DOSSIER + '/stock';
+var STK_KEY = STORE_KEY + '-stock';
+var STK_MAX_RECUS = 60;
+var STK = { queue: [], recus: [], saison: null, lu: null, err: null, busy: false, noSeason: false };
+try { var stkSaved = JSON.parse(localStorage.getItem(STK_KEY) || 'null'); if (stkSaved) { STK.queue = stkSaved.queue || []; STK.recus = stkSaved.recus || []; STK.saison = stkSaved.saison || null; STK.lu = stkSaved.lu || null; } } catch (e) {}
+function saveStk() { try { localStorage.setItem(STK_KEY, JSON.stringify({ queue: STK.queue, recus: STK.recus, saison: STK.saison, lu: STK.lu })); refreshUsage(); return true; } catch (e) { return false; } }
+function b64utf8d(b) { return decodeURIComponent(escape(atob(String(b || '').replace(/\s/g, '')))); }
+function stkCode(e) { return typeof e === 'number' ? e : (e === 'nosaison' || e === 'pasmien' ? e : 0); }
+function stkErrText(e) {
+  if (e === 'nosaison') return 'Aucun stock de saison : il doit d’abord être créé dans l’App admin';
+  if (e === 'pasmien') return 'Ce mouvement n’a pas été créé par cette tablette : la correction se fait dans l’App admin';
+  if (e === 409) return 'Le fichier du stock change sans arrêt : nouvel essai automatique';
+  return ghError(e);
+}
+/* Libellé d'un article pour le fichier de stock (même règle que le panier : catégorie devant, sauf prefixe false) */
+function stkArticle(pid) {
+  var r = null;
+  if (CATALOGUE) CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { if (p.id === pid) r = { libelle: k.prefixe === false ? p.libelle : k.nom + ' ' + p.libelle, categorie: k.nom }; }); });
+  return r;
+}
+/* Lecture d'un fichier de stock : { sha, data } ; lance le code HTTP en cas d'échec */
+async function stkRead(path) {
+  var r = await ghApi('GET', ghUrl(path), GH.token);
+  if (!r.ok) throw r.status;
+  var j = await r.json();
+  return { path: path, sha: j.sha, data: JSON.parse(b64utf8d(j.content)) };
+}
+/* Saison en cours : le fichier agri-garden-caisse/stock dont creeLe est le plus récent (null s'il n'y en a aucun) */
+async function stkSeason() {
+  var r = await ghApi('GET', ghUrl(STOCK_DIR), GH.token);
+  if (r.status === 404) return null;
+  if (!r.ok) throw r.status;
+  var list = (await r.json()).filter(function (f) { return f.type === 'file' && /\.json$/i.test(f.name); });
+  var best = null;
+  for (var i = 0; i < list.length; i++) {
+    var f;
+    try { f = await stkRead(list[i].path); } catch (e) { if (typeof e === 'number' && e !== 404) throw e; continue; }
+    if (!f.data || f.data.format !== 'agri-garden-caisse/stock') continue;
+    if (!best || String(f.data.creeLe || '') > String(best.data.creeLe || '')) best = f;
+  }
+  return best;
+}
+/* Transferts reçus par le stand de la tablette, du plus récent au plus ancien (copie réduite gardée sur la tablette) */
+function stkTakeRecus(d) {
+  var mv = d.mouvements || {}, stands = d.stands || {}, arts = d.articles || {};
+  STK.saison = { nom: d.nom || d.id || '', id: d.id || '' };
+  STK.recus = Object.keys(mv).map(function (k) { return { id: k, m: mv[k] }; })
+    .filter(function (x) { return x.m && x.m.type === 'transfert' && x.m.vers === S.placeId; })
+    .sort(function (a, b) { return String(b.m.date || '').localeCompare(String(a.m.date || '')) || String(b.m.creeLe || '').localeCompare(String(a.m.creeLe || '')); })
+    .slice(0, STK_MAX_RECUS)
+    .map(function (x) {
+      var de = findPlace(x.m.de);
+      return { id: x.id, date: x.m.date || '', de: x.m.de, deNom: (stands[x.m.de] && stands[x.m.de].nom) || (de && de.nom) || x.m.de, source: x.m.source || 'admin', appareil: x.m.appareil || null,
+        lignes: Object.keys(x.m.lignes || {}).map(function (pid) { var a = stkArticle(pid); return { id: pid, q: x.m.lignes[pid], libelle: (a && a.libelle) || (arts[pid] && arts[pid].libelle) || pid }; }) };
+    });
+  STK.lu = isoLocal(new Date()); STK.noSeason = false;
+}
+/* Applique une opération de la file ({op:'add', id, mv, noms} ou {op:'del', id}) : relecture, ajout ou retrait d'une seule clé, PUT avec le sha lu.
+   409/422 : le fichier a changé entre-temps, on relit et on recommence (3 essais au plus). */
+async function stkApply(op) {
+  var path = null;
+  for (var essai = 0; essai < 3; essai++) {
+    var f;
+    if (!path) { f = await stkSeason(); if (!f) throw 'nosaison'; path = f.path; }
+    else f = await stkRead(path);
+    var d = f.data;
+    if (!d.mouvements || typeof d.mouvements !== 'object' || Array.isArray(d.mouvements)) d.mouvements = {};
+    if (op.op === 'add') {
+      if (d.mouvements[op.id]) { stkTakeRecus(d); return; } // déjà envoyé (envoi répété) : pas de doublon
+      var n = op.noms || {};
+      d.stands = d.stands || {};
+      [op.mv.de, op.mv.vers].forEach(function (sid) { if (!d.stands[sid]) { var p = findPlace(sid); d.stands[sid] = { nom: (p && p.nom) || (n.stands && n.stands[sid]) || sid }; } });
+      d.articles = d.articles || {};
+      Object.keys(op.mv.lignes).forEach(function (pid) { if (!d.articles[pid]) d.articles[pid] = stkArticle(pid) || (n.articles && n.articles[pid]) || { libelle: pid, categorie: '' }; });
+      d.mouvements[op.id] = op.mv;
+    } else {
+      var m = d.mouvements[op.id];
+      if (!m) { stkTakeRecus(d); return; } // déjà supprimé
+      if (m.source !== 'caisse' || m.appareil !== GH.appareil) throw 'pasmien';
+      delete d.mouvements[op.id];
+    }
+    d.majLe = isoLocal(new Date()); d.majPar = 'caisse';
+    var pl = findPlace(S.placeId);
+    var r = await ghApi('PUT', ghUrl(path), GH.token, { message: 'Stock ' + (d.nom || d.id || '') + ' (Caisse Sapins ' + (pl ? pl.nom : S.placeId) + ')', content: b64utf8(JSON.stringify(d, null, 2)), sha: f.sha });
+    if (r.ok) { stkTakeRecus(d); return; }
+    if (r.status === 409 || r.status === 422) continue;
+    throw r.status;
+  }
+  throw 409;
+}
+/* Envoi de la file d'attente (même déclencheurs que l'envoi automatique des ventes) */
+async function stkSync() {
+  if (STK.busy || !STK.queue.length || !ghReady() || navigator.onLine === false) return;
+  STK.busy = true; render();
+  try {
+    while (STK.queue.length) {
+      await stkApply(STK.queue[0]);
+      STK.queue.shift(); saveStk();
+    }
+    STK.err = null;
+  } catch (e) {
+    var c = stkCode(e);
+    if (c === 401) { delete GH.token; saveGh(); }
+    if (c === 'pasmien') { STK.queue.shift(); } // suppression refusée : on l'abandonne, le mouvement reste dans le fichier
+    STK.err = c; saveStk();
+  } finally { STK.busy = false; render(); }
+}
+/* Relecture des transferts reçus (à l'ouverture de l'écran) */
+async function stkRefresh() {
+  if (!ghReady() || navigator.onLine === false || STK.busy) return;
+  STK.loading = true; render();
+  try {
+    var f = await stkSeason();
+    if (!f) { STK.noSeason = true; STK.recus = []; STK.saison = null; }
+    else stkTakeRecus(f.data);
+    STK.err = null; saveStk();
+  } catch (e) { var c = stkCode(e); if (c === 401) { delete GH.token; saveGh(); } STK.err = c; }
+  finally { STK.loading = false; render(); }
+  stkSync();
+}
+function stkPendingText() {
+  var n = STK.queue.length;
+  return n + ' mouvement' + (n > 1 ? 's' : '') + ' de stock';
+}
+S.rq = {};
 
 /* ---------- Imprimante de tickets et tiroir-caisse (Epson TM-m30III, service ePOS-Print) ----------
    La caisse envoie les ordres en HTTPS à l'imprimante (même réseau Wi-Fi que la tablette). Le tiroir-caisse est branché
@@ -1036,6 +1202,56 @@ var A = {
   tkSel: function (id) { S.tkId = id; },
   tkDup: function (v) { S.tkDup = v === '1'; },
   tkPrint: function () { var v = tkPrevSale(); if (!v || v.exemple) return; S.modal = null; printSale(S.tkDay, v.id, { duplicata: true }); },
+  rcOpen: function () { S.menu = false; S.cartOpen = false; S.modal = 'reception'; S.rcStep = null; S.rq = {}; S.rcDate = today(); S.rcMsg = null; S.rcDel = null; stkRefresh(); },
+  rcDe: function (id) { S.rcDe = id; S.rcMsg = null; },
+  rcAsk: function () {
+    var err = !/^\d{4}-\d{2}-\d{2}$/.test(S.rcDate || '') ? 'Indiquez la date de la réception.'
+      : !S.rcDe || S.rcDe === S.placeId || !findPlace(S.rcDe) ? 'Choisissez le stand d’où viennent les articles.'
+      : !rcLines().length ? 'Indiquez la quantité reçue pour au moins un article.' : null;
+    if (err) { S.rcMsg = { ok: false, text: err }; return; }
+    S.rcMsg = null; S.rcStep = 'confirm';
+  },
+  rcBack: function () { S.rcStep = null; },
+  rcSave: function () {
+    var lines = rcLines(); if (!lines.length) { S.rcStep = null; return; }
+    var now = new Date(), pl = findPlace(S.placeId), de = findPlace(S.rcDe);
+    var stamp = isoDate(now).replace(/-/g, '') + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+    var rnd = (Math.random().toString(36).slice(2) + '0000').slice(0, 4);
+    var id = 'tr-' + stamp + '-' + ((slug(pl ? pl.nom : '') || 'stand').slice(0, 24)) + '-' + rnd;
+    var mv = { type: 'transfert', date: S.rcDate, de: S.rcDe, vers: S.placeId, lignes: {}, creeLe: isoLocal(now), source: 'caisse', appareil: GH.appareil };
+    var noms = { stands: {}, articles: {} };
+    noms.stands[S.rcDe] = de ? de.nom : S.rcDe; noms.stands[S.placeId] = pl ? pl.nom : S.placeId;
+    lines.forEach(function (x) { mv.lignes[x.id] = x.q; noms.articles[x.id] = stkArticle(x.id); });
+    STK.queue.push({ op: 'add', id: id, mv: mv, noms: noms });
+    if (!saveStk()) { STK.queue.pop(); S.rcStep = null; S.rcMsg = { ok: false, text: 'Mémoire de la tablette pleine : réception NON enregistrée. Effacez d’anciens jours de ventes.' }; return; }
+    S.rq = {}; S.rcStep = null; STK.err = null;
+    var offline = !ghReady() || navigator.onLine === false;
+    S.rcMsg = offline ? { ok: false, text: 'Mouvement gardé sur la tablette, il sera envoyé dès qu’il y aura internet' + (ghReady() ? '.' : ' et que l’envoi GitHub sera déverrouillé.') }
+      : { ok: true, text: 'Envoi de la réception…' };
+    if (!offline) stkSync().then(function () {
+      var left = STK.queue.some(function (o) { return o.id === id; });
+      S.rcMsg = left ? { ok: false, text: 'Mouvement gardé sur la tablette, il sera envoyé dès qu’il y aura internet.' } : { ok: true, text: 'Réception enregistrée dans le stock de la saison.' };
+      render();
+    });
+  },
+  rcDelAsk: function (id) { S.rcDel = id; },
+  rcDelNo: function () { S.rcDel = null; },
+  rcDelGo: function (id) {
+    S.rcDel = null;
+    var qi = STK.queue.findIndex(function (o) { return o.op === 'add' && o.id === id; });
+    if (qi >= 0) { STK.queue.splice(qi, 1); saveStk(); S.rcMsg = { ok: true, text: 'Réception supprimée (elle n’avait pas encore été envoyée).' }; return; }
+    var r = STK.recus.filter(function (x) { return x.id === id; })[0];
+    if (!r || r.source !== 'caisse' || r.appareil !== GH.appareil) return;
+    STK.queue.push({ op: 'del', id: id }); saveStk();
+    var offline = !ghReady() || navigator.onLine === false;
+    S.rcMsg = offline ? { ok: false, text: 'Suppression gardée sur la tablette, elle sera envoyée dès qu’il y aura internet.' } : { ok: true, text: 'Suppression en cours…' };
+    if (!offline) stkSync().then(function () {
+      var left = STK.queue.some(function (o) { return o.op === 'del' && o.id === id; });
+      S.rcMsg = left ? { ok: false, text: 'Suppression gardée sur la tablette, elle sera envoyée dès qu’il y aura internet.' }
+        : STK.err === 'pasmien' ? { ok: false, text: stkErrText('pasmien') } : { ok: true, text: 'Réception supprimée du stock de la saison.' };
+      render();
+    });
+  },
   showJson: function () { S.menu = false; S.modal = 'json'; },
   download: function (date) {
     date = date || today();
@@ -1251,6 +1467,7 @@ var MI = {
   refresh: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
   drawer: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="9" rx="2"/><path d="M5 11V6h14v5M10 15.5h4"/></svg>',
   receipt: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
+  box: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>'
 };
 /* Bandeau ☁ de l'accueil et mention de l'en-tête : état de l'envoi automatique (toucher = fenêtre GitHub) */
@@ -1268,6 +1485,81 @@ function vPrMini(sep) {
   var s = PR_ST.state, txt = S.prBusy ? 'Impression…' : s === 'ok' ? 'Prête' : s === null ? 'Vérification…' : PR_ST.text;
   return sep + '<span data-a="prCheckNow" style="cursor:pointer;font-weight:700;white-space:nowrap;color:' + (s === 'ok' || s === null ? 'var(--faint)' : s === 'warn' ? 'var(--amber)' : 'var(--red)') + '">🖨 ' + esc(txt) + '</span>';
 }
+/* ---------- Écran « Réception de stock » ---------- */
+function rcLines() {
+  var out = [];
+  if (!CATALOGUE) return out;
+  CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { var q = parseInt(S.rq[p.id], 10); if (q > 0) out.push({ id: p.id, q: q, libelle: stkArticle(p.id).libelle }); }); });
+  return out;
+}
+function rcTotalText(l) {
+  if (!l.length) return 'Aucun article';
+  var pcs = l.reduce(function (a, x) { return a + x.q; }, 0);
+  return l.length + ' article' + (l.length > 1 ? 's' : '') + ' · ' + pcs + ' pièce' + (pcs > 1 ? 's' : '');
+}
+function rcStatus() {
+  var n = STK.queue.length;
+  if (STK.busy) return { cls: '', t: 'Envoi en cours…' };
+  if (n) {
+    var why = !ghReady() ? 'envoi GitHub verrouillé : touchez le bandeau ☁ de l’accueil pour déverrouiller'
+      : navigator.onLine === false ? 'pas de réseau : envoi dès le retour d’internet'
+      : STK.err != null ? stkErrText(STK.err) : 'envoi dans quelques instants';
+    return { cls: 'warn', t: stkPendingText() + ' en attente sur la tablette (' + why + ')' };
+  }
+  if (STK.err != null) return { cls: 'ko', t: stkErrText(STK.err) };
+  if (STK.noSeason) return { cls: 'ko', t: stkErrText('nosaison') };
+  return { cls: 'ok', t: 'Tout est envoyé' + (STK.lu ? ' · liste lue le ' + frDate(STK.lu).slice(0, 5) + ' à ' + STK.lu.slice(11, 16) : '') };
+}
+function rcLineText(l) { return l.map(function (x) { return x.q + ' × ' + esc(x.libelle); }).join(', '); }
+function vReception() {
+  var pl = findPlace(S.placeId), others = CATALOGUE.pointsDeVente.filter(function (p) { return p.id !== S.placeId; });
+  var lines = rcLines(), st = rcStatus();
+  var head = '<div class="row"><h2>Réception de stock</h2><button class="btn" data-a="close">Fermer</button></div>';
+  if (S.rcStep === 'confirm') {
+    var de = findPlace(S.rcDe);
+    return '<div class="overlay"><div class="modal rcmodal">' + head +
+      '<div class="rcbox"><div><span class="sub">Date</span><strong>' + frDate(S.rcDate) + '</strong></div><div><span class="sub">Depuis</span><strong>' + esc(de ? de.nom : '') + '</strong></div><div><span class="sub">Vers</span><strong>' + esc(pl ? pl.nom : '') + '</strong></div></div>' +
+      '<div class="rclist">' + lines.map(function (x) { return '<div class="rcrow"><span>' + esc(x.libelle) + '</span><strong>' + x.q + '</strong></div>'; }).join('') + '</div>' +
+      '<div class="rctot">' + rcTotalText(lines) + '</div>' +
+      '<div class="actions"><button class="btn" data-a="rcBack">Modifier</button><button class="btn btn-primary" data-a="rcSave">Confirmer la réception</button></div></div></div>';
+  }
+  var cats = CATALOGUE.categories.map(function (k) {
+    return '<div class="rccat">' + esc(k.nom) + '</div>' + k.produits.map(function (p) {
+      return '<label class="rcrow"><span>' + esc(p.libelle) + '</span><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0" data-f="rq:' + esc(p.id) + '" value="' + esc(S.rq[p.id] || '') + '"></label>';
+    }).join('');
+  }).join('');
+  var queued = STK.queue.filter(function (o) { return o.op === 'add' && o.mv.vers === S.placeId; }).map(function (o) {
+    var de = findPlace(o.mv.de);
+    return { id: o.id, date: o.mv.date, deNom: (de && de.nom) || o.mv.de, source: 'caisse', appareil: GH.appareil, attente: true,
+      lignes: Object.keys(o.mv.lignes).map(function (pid) { var a = stkArticle(pid); return { q: o.mv.lignes[pid], libelle: (a && a.libelle) || (o.noms && o.noms.articles && o.noms.articles[pid] && o.noms.articles[pid].libelle) || pid }; }) };
+  });
+  var dels = {}; STK.queue.forEach(function (o) { if (o.op === 'del') dels[o.id] = true; });
+  var hist = queued.reverse().concat(STK.recus.filter(function (r) { return !queued.some(function (q) { return q.id === r.id; }); })).map(function (r) {
+    var mine = r.source === 'caisse' && r.appareil === GH.appareil;
+    var orig = r.source === 'caisse' ? 'Caisse' + (mine ? ' (cette tablette)' : r.appareil ? ' (appareil ' + esc(r.appareil) + ')' : '') : 'Admin';
+    var act = dels[r.id] ? '<span class="sub">Suppression en attente d’envoi</span>'
+      : !mine ? ''
+      : S.rcDel === r.id ? '<button class="btn btn-danger" data-a="rcDelGo" data-v="' + esc(r.id) + '" style="border:1px solid var(--red)">Confirmer la suppression</button><button class="btn" data-a="rcDelNo">Annuler</button>'
+      : '<button class="btn btn-danger" data-a="rcDelAsk" data-v="' + esc(r.id) + '">Supprimer</button>';
+    return '<div class="rchist"><div class="rch-top"><strong>' + frDate(r.date) + ' · depuis ' + esc(r.deNom) + '</strong><span class="sub">' + orig + (r.attente ? ' · <b class="rcwait">en attente d’envoi</b>' : '') + '</span></div>' +
+      '<div class="rch-l">' + rcLineText(r.lignes) + '</div>' + (act ? '<div class="rch-a">' + act + '</div>' : '') + '</div>';
+  }).join('');
+  return '<div class="overlay"><div class="modal rcmodal" data-keep="rc">' + head +
+    '<div class="sub">Articles arrivés d’un autre stand vers <strong>' + esc(pl ? pl.nom : '') + '</strong>. Ils sont ajoutés au stock de la saison géré par l’App admin.</div>' +
+    (S.rcMsg ? '<div class="rcmsg ' + (S.rcMsg.ok ? 'ok' : 'warn') + '">' + esc(S.rcMsg.text) + '</div>' : '') +
+    '<div class="rcstat ' + st.cls + '">' + esc(st.t) + '</div>' +
+    '<label class="f">Date<input type="date" data-f="rcDate" value="' + esc(S.rcDate) + '"></label>' +
+    '<div class="f"><span class="sub" style="font-weight:700">Depuis le stand</span><div class="rcchips">' +
+      (others.length ? others.map(function (p) { return '<button class="rcchip' + (S.rcDe === p.id ? ' on' : '') + '" data-a="rcDe" data-v="' + esc(p.id) + '">' + esc(p.nom) + '</button>'; }).join('') : '<span class="sub">Aucun autre point de vente dans le catalogue.</span>') +
+    '</div></div>' +
+    '<div class="rclist">' + cats + '</div>' +
+    '<div class="rcfoot"><span class="rctot" id="rcTot">' + rcTotalText(lines) + '</span><button class="btn btn-primary" data-a="rcAsk">Enregistrer la réception</button></div>' +
+    '<h3 class="rch3">Reçus par ' + esc(pl ? pl.nom : '') + (STK.saison && STK.saison.nom ? ' · ' + esc(STK.saison.nom) : ' cette saison') + '</h3>' +
+    (STK.loading ? '<div class="sub">Lecture du stock…</div>' : '') +
+    (hist || '<div class="empty" style="padding:16px">' + (ghReady() ? 'Aucun transfert reçu pour l’instant.' : 'Déverrouillez l’envoi GitHub pour voir les transferts reçus.') + '</div>') +
+    '<div class="sub">Seuls les transferts encodés sur cette tablette peuvent être supprimés ici. Les autres corrections se font dans l’App admin.</div>' +
+    '</div></div>';
+}
 function vMenu() {
   if (!S.menu) return '';
   function tile(a, icon, label, sub, extra) {
@@ -1277,6 +1569,7 @@ function vMenu() {
     tile('showDays', MI.cal, 'Ventes des jours précédents', 'Télécharger, envoyer, effacer') +
     tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
     (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '') +
+    (ghConfigured() ? tile('rcOpen', MI.box, 'Réception de stock', STK.queue.length ? STK.queue.length + ' en attente d\u2019envoi' : 'Articles venus d\u2019un autre stand') : '') +
     (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '') : '');
   var catalogue = (OPTIONS.ajoutArticles ? tile('openAddCat', MI.plus, 'Ajouter un article', 'Au catalogue de cet appareil') : '') +
     (GESTION_CATALOGUE ? tile('showManage', MI.sliders, 'Gérer le catalogue', 'Activer, désactiver, prix') : '') +
@@ -1608,6 +1901,7 @@ function vJson() {
 var app = document.getElementById('app');
 function render() {
   var act = document.activeElement, f = act && act.dataset ? act.dataset.f : null, pos = f ? act.selectionStart : null;
+  var keep = {}; app.querySelectorAll('[data-keep]').forEach(function (el) { keep[el.dataset.keep] = el.scrollTop; });
   var html = S.screen === 'home' ? vHome() : S.screen === 'setup' ? vSetup() : vPos();
   if (S.modal === 'free') html += vFree();
   else if (S.modal === 'disc') html += vDisc();
@@ -1625,8 +1919,10 @@ function render() {
   else if (S.modal === 'tkprev') html += vTkPrev();
   else if (S.modal === 'drawer') html += vDrawer();
   else if (S.modal === 'prerr') html += vPrErr();
+  else if (S.modal === 'reception') html += vReception();
   if (S.toast) html += '<div class="toast">' + esc(S.toast) + '</div>';
   app.innerHTML = html;
+  app.querySelectorAll('[data-keep]').forEach(function (el) { if (keep[el.dataset.keep]) el.scrollTop = keep[el.dataset.keep]; });
   if (f) { var el = app.querySelector('[data-f="' + f + '"]'); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} } }
 }
 document.addEventListener('click', function (e) {
@@ -1637,7 +1933,18 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('input', function (e) {
   var f = e.target.dataset && e.target.dataset.f;
+  if (f && f.indexOf('rq:') === 0) { // quantité reçue : pas de rendu complet (garde le défilement et le clavier)
+    var v = e.target.value.replace(/\D/g, '').slice(0, 4); if (v !== e.target.value) e.target.value = v;
+    S.rq[f.slice(3)] = v; var tt = document.getElementById('rcTot'); if (tt) tt.textContent = rcTotalText(rcLines()); return;
+  }
   if (f) { S[f] = e.target.value; render(); }
+});
+document.addEventListener('keydown', function (e) { // Entrée = article suivant
+  var f = e.target.dataset && e.target.dataset.f;
+  if (e.key !== 'Enter' || !f || f.indexOf('rq:') !== 0) return;
+  e.preventDefault();
+  var all = Array.prototype.slice.call(app.querySelectorAll('[data-f^="rq:"]')), nx = all[all.indexOf(e.target) + 1];
+  if (nx) { nx.focus(); try { nx.select(); } catch (er) {} } else e.target.blur();
 });
 // Catalogue publié par l'app Admin (catalogue.json à côté de index.html, hors paquet de l'app)
 function installCat(raw, cat) {

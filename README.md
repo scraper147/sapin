@@ -93,6 +93,17 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 - **Ticket** (proposition 1, à valider avec le gérant) : logo Agri-Garden en noir et blanc, activité, adresse (Rue de Soye, 6 – 5190 Spy) / téléphone / e-mail / TVA BE 0782.523.348 (bloc `TICKET` en haut du module « Ticket » dans `index.html` ; un champ vide n'est pas imprimé), n° de ticket, date, point de vente, articles (quantité × prix, remises), TOTAL en grand, nombre d'articles, paiement (cash reçu / rendu), conseil d'entretien du sapin, « Merci et joyeuses fêtes ! », « Ce ticket n'est pas une facture. ». 48 caractères par ligne, montants sans symbole (« EUR » au total).
 - **⋮ → Aperçu du ticket** (sans imprimante) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
 
+## Réception de stock (transferts vers le stand de la tablette)
+
+**⋮ → Réception de stock** : encoder des articles arrivés d'un autre stand (par exemple Spy → Meux). Le stock de la saison est géré par l'**App admin** (Gestion sapin › Stock) ; la caisse ajoute seulement ses transferts dans le même fichier.
+
+- Formulaire : date (aujourd'hui par défaut), **Depuis le stand** (les autres points de vente du catalogue), quantité reçue par article (clavier numérique, **Entrée** = article suivant), total en direct (« 2 articles · 14 pièces »), **Enregistrer la réception** puis confirmation récapitulative.
+- Fichier : dépôt privé des ventes, `<GH_DOSSIER>/stock/<saison>.json` (format `agri-garden-caisse/stock`) ; saison en cours = le fichier de ce format dont `creeLe` est le plus récent. Aucun fichier : « Aucun stock de saison : il doit d'abord être créé dans l'App admin ».
+- Écriture : relecture du fichier (contenu + `sha`), ajout d'une seule clé dans `mouvements` (`tr-AAAAMMJJhhmmss-<stand>-xxxx`, `type: "transfert"`, `de`, `vers` = stand de la tablette, `lignes`, `source: "caisse"`, `appareil`), des `stands` / `articles` manquants, `majLe` / `majPar: "caisse"`, puis PUT avec le `sha`. Conflit (409/422) : relecture et nouvel essai, 3 fois au plus. Jamais de réécriture depuis une copie de la tablette.
+- Hors ligne ou appareil verrouillé : « Mouvement gardé sur la tablette, il sera envoyé dès qu'il y aura internet » ; la file d'attente part avec l'envoi automatique (retour du réseau, démarrage, premier plan, chaque minute). Un envoi répété ne crée pas de doublon (même identifiant).
+- En dessous : les transferts reçus par ce stand pendant la saison (Admin ou caisse). Une tablette peut **supprimer** un transfert qu'elle a créé elle-même (relecture, suppression de la clé, PUT avec `sha`) ; les autres corrections se font dans l'App admin.
+- Mémoire de la tablette : seulement la file d'attente et les 60 derniers transferts reçus (clé `agrigarden-caisse-stock`).
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -112,7 +123,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v17';` → `'v18'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v18';` → `'v19'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
