@@ -116,7 +116,7 @@ Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas 
 
 ## Livraison
 
-Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) à côté de **+ Article libre** : ajoute les frais de livraison au panier, **une seule fois par vente** (ensuite le bouton affiche « Livraison ajoutée » et le « + » de la ligne est désactivé ; « − » la retire).
+Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) **dans le panier, à côté de « Remise ticket »** (toujours au même endroit, quelle que soit la largeur de l'écran ; sur smartphone, dans l'écran du panier) : ajoute les frais de livraison au panier, **une seule fois par vente** (ensuite le bouton affiche « Livraison ajoutée » et le « + » de la ligne est désactivé ; « − » la retire).
 - Le prix vient du **catalogue** : un article dont le libellé est **« Livraison »** (ou « Frais de livraison »), dans n'importe quelle catégorie. Conseil : dans l'App admin, une catégorie « Services » (sans nom de catégorie devant le libellé) avec l'article « Livraison » et son prix, puis publier le catalogue.
 - Cet article n'apparaît pas dans les tuiles, ni dans le stock, ni dans la réception de stock. Une catégorie qui ne contient que lui n'a pas d'onglet.
 - Sans cet article dans le catalogue, le bouton n'est pas affiché.
@@ -141,7 +141,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v21';` → `'v22'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v22';` → `'v23'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
