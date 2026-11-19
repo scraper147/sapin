@@ -1,7 +1,7 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 8,
+  "version": 9,
   "date": "2026-11-19",
   "pointsDeVente": [
     {
@@ -172,7 +172,8 @@
           "ordre": 1,
           "actif": true
         }
-      ]
+      ],
+      "prefixe": false
     }
   ]
 }
