@@ -340,7 +340,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v31'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v32'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -1325,7 +1325,6 @@ var TICKET = {
   email: 'vaerman_xavier@hotmail.com',
   tva: 'BE 0782.523.348',
   site: '',               // pas de site : ligne non imprimée
-  conseil: 'Conseil : coupez 2 cm à la base du tronc, arrosez votre sapin chaque jour et placez-le loin des radiateurs.',
   merci: 'Merci et joyeuses fêtes !',
   mention: 'Ce ticket n’est pas une facture.'
 };
@@ -1391,8 +1390,11 @@ function ticketXml(v, opts) {
   if (v.livraisonAjoutee) t('Livraison ajoutée le ' + frDate(v.livraisonAjoutee.horodatage).slice(0, 5) + ' à ' + v.livraisonAjoutee.horodatage.slice(11, 16));
   if (v.venteLiee) { var lo = findSale(v.venteLiee); t('Livraison de la vente n° ' + saleNum(v.venteLiee) + (lo ? ' du ' + frDate(lo.date).slice(0, 5) : '')); }
   t(SEP2);
-  var nb = 0;
-  v.lignes.forEach(function (l) {
+  var nb = 0, isDl = function (l) { return isDeliveryId(l.produitId) || isDeliveryLabel(l.libelle); };
+  /* livraison toujours en dernier, séparée des articles par 10 tirets */
+  var arts = v.lignes.filter(function (l) { return !isDl(l); }), livs = v.lignes.filter(isDl);
+  arts.concat(livs).forEach(function (l, i) {
+    if (livs.length && arts.length && i === arts.length) t('----------');
     nb += l.quantite;
     var brut = r2(l.prixUnitaire * l.quantite);
     if (l.quantite === 1 && !l.remise) { t(tkLine(l.libelle, tkMoney(l.total))); return; }
@@ -1413,7 +1415,6 @@ function ticketXml(v, opts) {
   if (p.mode === 'cash' && opts.recu) { t(tkLine('Reçu', tkMoney(opts.recu))); t(tkLine('Rendu', tkMoney(Math.max(0, opts.recu - v.total)))); }
   if (v.annulation) { x += '<feed line="1"/>'; st('em="true"'); t('VENTE ANNULÉE le ' + frDate(v.annulation.horodatage) + ' à ' + v.annulation.horodatage.slice(11, 16)); st('em="false"'); }
   x += '<feed line="1"/>';
-  if (TICKET.conseil) { tkWrap(TICKET.conseil).forEach(function (s) { t(s); }); x += '<feed line="1"/>'; }
   st('align="center"');
   if (TICKET.merci) { st('em="true"'); t(TICKET.merci); st('em="false"'); }
   if (TICKET.mention) t(TICKET.mention);
