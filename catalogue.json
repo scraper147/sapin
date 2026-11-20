@@ -1,8 +1,8 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 10,
-  "date": "2026-11-19",
+  "version": 11,
+  "date": "2026-11-20",
   "pointsDeVente": [
     {
       "id": "pdv1",
@@ -22,6 +22,11 @@
     {
       "id": "pdv4",
       "nom": "Boninne",
+      "actif": true
+    },
+    {
+      "id": "pdv5",
+      "nom": "Floreffe",
       "actif": true
     }
   ],
