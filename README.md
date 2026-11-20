@@ -75,13 +75,13 @@ Une fois configurée :
 Matériel : imprimante **Epson TM-m30III** (version Wi-Fi ou réseau) et tiroir **BYPOS C35** (24 V, câble RJ12 branché sur la prise « DK » de l'imprimante). Le tiroir ne s'ouvre que sur ordre de la caisse, ou avec sa clé (à garder sur le stand en cas de panne).
 
 **Installation (une fois par tablette)**
-1. Imprimante allumée et connectée au même Wi-Fi que la tablette (routeur du stand ou partage de connexion ; internet n'est pas nécessaire pour imprimer).
-2. Relever l'adresse IP de l'imprimante (feuille d'état : maintenir le bouton FEED en allumant l'imprimante).
-3. Caisse → **Paramètres de la tablette → Imprimante de tickets et tiroir-caisse** : saisir l'adresse.
+1. Imprimante allumée, tablette connectée à son Wi-Fi (mode SimpleAP : réseau `DIRECT-TM-m30III-…`, mot de passe sur l'étiquette ; internet n'est pas nécessaire pour imprimer).
+2. Adresse de l'imprimante : **172.16.10.1** par défaut (`PR_IP_DEFAUT`, adresse des TM-m30III en Wi-Fi direct), déjà réglée au premier lancement de la caisse sur une tablette ; à changer seulement si l'imprimante a une autre adresse (feuille d'état). Après « Retirer l'imprimante », l'adresse par défaut n'est plus remise.
+3. Caisse → **Paramètres de la tablette → Imprimante de tickets et tiroir-caisse** : vérifier ou saisir l'adresse.
 4. Toucher **Accepter le certificat** : Chrome affiche un avertissement → **Paramètres avancés → Continuer**. Revenir dans la caisse. (La caisse est en HTTPS : la tablette doit accepter une fois le certificat de l'imprimante.) Si Chrome demande l'accès aux appareils du réseau local, autoriser.
 5. **Ticket test**, puis **Tester le tiroir**, puis **Enregistrer**.
 
-Sans adresse d'imprimante, la caisse fonctionne comme avant (pas de tiroir, pas de ticket).
+Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctionne comme avant (pas de tiroir, pas de ticket).
 
 **À l'usage**
 - **Encaisser** : choisir d'abord le mode de paiement ; il peut être changé jusqu'à la validation si le client change d'avis. Le tiroir s'ouvre quand le vendeur indique l'argent reçu (billet rapide ou **Montant exact**), une fois par encaissement ; si le montant est tapé au clavier, le tiroir s'ouvre à la validation. Après **Valider la vente** : « Imprimer le ticket ? » (Non / Imprimer), avec le montant à rendre.
@@ -164,7 +164,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v32';` → `'v33'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v33';` → `'v34'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 

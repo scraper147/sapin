@@ -340,7 +340,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v32'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v33'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -1256,9 +1256,13 @@ function vCaisseDuJour() {
    sur la prise « DK » de l'imprimante : il ne s'ouvre que sur ordre de la caisse (ou avec sa clé).
    Une vente n'est JAMAIS bloquée par l'imprimante : en cas d'échec, la vente reste enregistrée et un message s'affiche. */
 var PR_KEY = STORE_KEY + '-imprimante';
-var PR = {};
-try { PR = JSON.parse(localStorage.getItem(PR_KEY)) || {}; } catch (e) { PR = {}; }
+/* Adresse par défaut : celle des TM-m30III en Wi-Fi direct (SimpleAP). Utilisée tant que l'imprimante n'a jamais été
+   réglée sur la tablette ; après « Retirer l'imprimante », elle n'est plus remise. */
+var PR_IP_DEFAUT = '172.16.10.1';
+var PR = {}, prStored = null;
+try { prStored = localStorage.getItem(PR_KEY); PR = JSON.parse(prStored) || {}; } catch (e) { PR = {}; }
 function savePr() { try { localStorage.setItem(PR_KEY, JSON.stringify(PR)); return true; } catch (e) { return false; } }
+if (prStored === null && PR_IP_DEFAUT) { PR.ip = PR_IP_DEFAUT; savePr(); }
 function prConfigured() { return !!PR.ip; }
 function prBase(ip) { ip = String(ip || '').trim().replace(/\/+$/, ''); return /^https?:\/\//i.test(ip) ? ip : 'https://' + ip; }
 var EPOS_NS = 'http://www.epson-pos.com/schemas/2011/03/epos-print';
@@ -1824,7 +1828,7 @@ function vSetup() {
     '<section style="display:flex;flex-direction:column;gap:12px">' +
       '<h2 style="margin:0;font-size:19px;font-weight:800">Imprimante de tickets et tiroir-caisse <span class="sub" style="font-weight:600">(facultatif)</span></h2>' +
       '<div class="sub">Epson TM-m30III sur le même Wi-Fi que la tablette, tiroir branché sur l\u2019imprimante. Adresse IP de l\u2019imprimante (imprimée sur la feuille d\u2019état, en maintenant le bouton FEED à l\u2019allumage). Laisser vide s\u2019il n\u2019y a pas d\u2019imprimante.</div>' +
-      '<label class="f">Adresse de l\u2019imprimante<input type="text" inputmode="url" data-f="prIp" value="' + esc(S.prIp || '') + '" placeholder="ex. 192.168.1.50" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+      '<label class="f">Adresse de l\u2019imprimante<input type="text" inputmode="url" data-f="prIp" value="' + esc(S.prIp || '') + '" placeholder="ex. ' + PR_IP_DEFAUT + '" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
       '<div class="actions stack" style="justify-content:flex-start">' +
         ((S.prIp || '').trim() ? '<a class="btn" href="' + esc(prBase(S.prIp)) + '/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none;color:var(--text)">Accepter le certificat</a>' : '') +
         '<button class="btn" data-a="prTest"' + ((S.prIp || '').trim() ? '' : ' disabled') + '>Ticket test</button>' +
