@@ -118,6 +118,9 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .phone .cats::-webkit-scrollbar{display:none}
 .phone .cat{flex-shrink:0;height:42px;padding:0 16px;font-size:15px}
 .phone .free{flex-shrink:0;height:42px;padding:0 14px;font-size:15px;margin-left:0}
+.free.short{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--green);background:var(--tint);box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap}
+.free.short svg{flex-shrink:0}
+.free.short:active{transform:translateY(1px);box-shadow:none}
 .phone .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .phone .prod{height:100px;padding:12px}
 .phone .prod .m{font-size:16px}
@@ -340,7 +343,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v33'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v35'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -359,6 +362,14 @@ function isDeliveryLabel(t) { var s = slug(t); return s === 'livraison' || s ===
 function deliveryProduct() {
   var r = null;
   if (CATALOGUE) CATALOGUE.categories.forEach(function (k) { k.produits.forEach(function (p) { if (!r && isDeliveryLabel(p.libelle)) r = { p: p, cat: k }; }); });
+  return r;
+}
+/* Raccourci à côté des onglets (à la place de « + Article libre », qui passe dans le menu ⋮) : un article du catalogue,
+   désigné par son identifiant. S'il est absent ou désactivé dans le catalogue, le bouton « + Article libre » revient à sa place. */
+var RACCOURCI_ID = 'a1'; // Croix en bois
+function shortcutProduct() {
+  var r = null;
+  if (CATALOGUE && RACCOURCI_ID) visibleCats().forEach(function (k) { k.produits.forEach(function (p) { if (!r && p.id === RACCOURCI_ID) r = p; }); });
   return r;
 }
 function isDeliveryId(pid) { var d = deliveryProduct(); return !!(d && pid && d.p.id === pid); }
@@ -1593,6 +1604,7 @@ var A = {
   dec: function (i) { i = +i; if (--S.cart[i].qty <= 0) S.cart.splice(i, 1); if (!S.cart.length) S.ticketDisc = null; },
   clear: function () { S.cart = []; S.ticketDisc = null; },
   openFree: function () { S.modal = 'free'; S.freeLabel = ''; S.freePrice = ''; },
+  openFreeMenu: function () { S.menu = false; A.openFree(); },
   addFree: function () { S.cart.push({ produitId: null, categorie: 'Article libre', name: S.freeLabel.trim(), price: num(S.freePrice), qty: 1, disc: null }); S.modal = null; },
   lineDisc: function (i) { var l = S.cart[+i]; S.modal = 'disc'; S.discTarget = +i; S.discType = l.disc ? l.disc.type : '%'; S.discVal = l.disc ? String(l.disc.val).replace('.', ',') : ''; },
   ticketDisc: function () { S.modal = 'disc'; S.discTarget = 'ticket'; S.discType = S.ticketDisc ? S.ticketDisc.type : '%'; S.discVal = S.ticketDisc ? String(S.ticketDisc.val).replace('.', ',') : ''; },
@@ -1881,12 +1893,18 @@ function vDelivBtn() {
   var inCart = S.cart.some(function (l) { return l.produitId === d.p.id; });
   return '<button class="small deliv' + (inCart ? ' done' : '') + '" data-a="addDelivery"' + (inCart ? ' disabled' : '') + '>' + TRUCK + '<span>' + (inCart ? 'Livraison ajoutée' : 'Livraison') + '</span></button>';
 }
+var PLUS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+function vShortcut() {
+  var p = shortcutProduct();
+  if (!p) return '<button class="free" data-a="openFree">+ Article libre</button>';
+  return '<button class="free short" data-a="add" data-v="' + esc(p.id) + '">' + PLUS + '<span>' + esc(p.libelle) + '</span></button>';
+}
 function vCaisse() {
   var CATS = visibleCats();
   var cat = CATS.filter(function (c) { return c.id === S.cat; })[0] || CATS[0] || { nom: '', produits: [] };
   var html = '<div class="body"><div class="catalog"><div class="cats">' +
     CATS.map(function (c) { return '<button class="cat' + (c.id === cat.id ? ' on' : '') + '" data-a="cat" data-v="' + c.id + '">' + esc(c.nom) + '</button>'; }).join('') +
-    '<button class="free" data-a="openFree">+ Article libre</button></div><div class="products">' +
+    vShortcut() + '</div><div class="products">' +
     (CATS.length ? '' : '<div class="emptycat">Aucun article actif. ' + 'Le catalogue doit être complété dans l\u2019app Admin.' + '</div>') +
     (function () { var st = stockOfPlace(); return cat.produits.map(function (p) {
       return '<button class="prod" data-a="add" data-v="' + p.id + '"><div style="display:flex;flex-direction:column;gap:2px"><span class="m">' + esc(p.libelle) + '</span><span class="s">' + esc(cat.nom) + '</span></div>' + vRest(st, p.id) + '<span class="p">' + money(p.prix) + '</span></button>';
@@ -1954,6 +1972,7 @@ function vHist() {
 }
 
 var MI = {
+  tag: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
   down: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   cal: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   up: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.6-7.96A6 6 0 0 1 17.3 8.5 4.5 4.5 0 0 1 17 18h-1"/><path d="M12 12v8M9 15l3-3 3 3"/></svg>',
@@ -2064,7 +2083,7 @@ function vMenu() {
   }
   var cs = cxSummary();
   /* Ordre voulu (3 par ligne sur tablette) : Envoyer maintenant, Caisse du jour, Ventes des jours précédents /
-     Vérifier le catalogue, Stock du stand, Réception de stock / Aperçu du ticket (+ Ouvrir le tiroir si imprimante) */
+     Vérifier le catalogue, Stock du stand, Réception de stock / Article libre (+ Ouvrir le tiroir si imprimante) */
   var tiles =
     (ghConfigured() ? (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '')
       : tile('openGh', MI.up, 'Envoyer maintenant', 'Verrouillé : toucher pour déverrouiller')) : '') +
@@ -2073,7 +2092,7 @@ function vMenu() {
     tile('checkCatMenu', MI.refresh, S.catLoading ? 'Vérification…' : 'Vérifier le catalogue', S.siteUpdate ? 'Mise à jour disponible' : 'Installé : v' + CATALOGUE.version, S.siteUpdate ? ' style="border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)"' : '') +
     (ghConfigured() ? tile('stkShow', MI.chart, 'Stock du stand', STKC.at && STKC.place === S.placeId ? 'Calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) : 'Restant par article') : '') +
     (ghConfigured() ? tile('rcOpen', MI.box, 'Réception de stock', STK.queue.length ? STK.queue.length + ' en attente d\u2019envoi' : 'Articles venus d\u2019un autre stand') : '') +
-    tile('tkPrev', MI.receipt, 'Aperçu du ticket', 'Voir le ticket d\u2019une vente') +
+    tile('openFreeMenu', MI.tag, 'Article libre', 'Hors catalogue : libellé et prix') +
     (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '');
   return '<div class="menu-back" data-a="toggleMenu"></div><div class="menu tiles" role="menu">' +
     '<div class="mgrid m3">' + tiles + '</div>' +

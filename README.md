@@ -70,6 +70,10 @@ Une fois configurée :
 - Fichier : `<GH_DOSSIER>/AAAA-MM-JJ_<point de vente>_<nom>_<appareil>.json` (même contenu que l'export) ; l'identifiant de l'appareil évite que deux tablettes du même point de vente s'écrasent ; chaque envoi remplace le fichier de cette tablette pour ce jour. Si le point de vente de la tablette change, l'ancien fichier du jour est supprimé.
 - Un jour envoyé compte comme exporté : il peut ensuite être effacé de la tablette.
 
+## Raccourci et article libre
+
+À côté des onglets de la caisse, un bouton **raccourci** ajoute directement un article du catalogue au panier (aujourd'hui « Croix en bois »). Il est désigné par son identifiant : `var RACCOURCI_ID = 'a1';` en haut du script. Si cet article est absent ou désactivé dans le catalogue, le bouton « + Article libre » reprend sa place. L'**article libre** (libellé et prix tapés) se trouve dans **⋮ → Article libre**.
+
 ## Imprimante de tickets et tiroir-caisse
 
 Matériel : imprimante **Epson TM-m30III** (version Wi-Fi ou réseau) et tiroir **BYPOS C35** (24 V, câble RJ12 branché sur la prise « DK » de l'imprimante). Le tiroir ne s'ouvre que sur ordre de la caisse, ou avec sa clé (à garder sur le stand en cas de panne).
@@ -91,7 +95,7 @@ Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctio
 - **Une vente n'est jamais bloquée par l'imprimante** : si le ticket ne sort pas, la vente reste enregistrée, la fenêtre « Ticket non imprimé » propose **Réessayer** (ou réimprimer plus tard depuis l'Historique). Si le tiroir ne s'ouvre pas : utiliser la clé.
 - **Journal du tiroir** : chaque ouverture est enregistrée avec l'heure et le motif (« Vente » + numéro de vente, « Encaissement abandonné », « Test du tiroir », ou le motif choisi). Il est inclus dans le fichier du jour (`ouverturesTiroir`, `nombreOuverturesSansVente`) et envoyé sur GitHub avec les ventes.
 - **Ticket** (proposition 1, à valider avec le gérant) : logo Agri-Garden en noir et blanc, activité, adresse (Rue de Soye, 6 – 5190 Spy) / téléphone / e-mail / TVA BE 0782.523.348 (bloc `TICKET` en haut du module « Ticket » dans `index.html` ; un champ vide n'est pas imprimé), n° de ticket, date, point de vente, articles (quantité × prix, remises ; la livraison toujours en dernier, séparée des articles par 10 tirets), TOTAL en grand, nombre d'articles, paiement (cash reçu / rendu), « Merci et joyeuses fêtes ! », « Ce ticket n'est pas une facture. ». 48 caractères par ligne, montants sans symbole (« EUR » au total).
-- **⋮ → Aperçu du ticket** (sans imprimante) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
+- **Aperçu du ticket** (retiré du menu ⋮ en v34, code conservé : `A.tkPrev`) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
 
 ## Stock du stand (consultation)
 
@@ -116,7 +120,7 @@ Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctio
 
 ## Menu ⋮
 
-Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Aperçu du ticket**, **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
+Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Article libre**, **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
 
 ## Caisse du jour : fond de caisse, retraits, comptage
 
@@ -164,7 +168,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v33';` → `'v34'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v35';` → `'v36'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
