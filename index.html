@@ -300,6 +300,11 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 .small.deliv svg{flex-shrink:0}
 .small.deliv:active{transform:translateY(1px);box-shadow:none}
 .small.deliv.done{border-color:var(--line2);background:var(--soft);color:var(--muted);box-shadow:none}
+.codedots{display:flex;justify-content:center;gap:16px;margin:6px 0}
+.codedots span{width:18px;height:18px;border-radius:50%;border:2px solid var(--green)}
+.codedots span.on{background:var(--green)}
+.codepad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.codepad .btn{height:64px;font-size:26px;font-weight:800}
 .small.deliv.set{background:var(--green);color:#fff;border-color:var(--green)}
 .sale .link{color:var(--green);font-weight:700}
 .sale .act .hdeliv{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--green);background:var(--tint);color:var(--green);font-weight:800}
@@ -344,7 +349,7 @@ pre.json{flex:1;margin:0;overflow:auto;background:#151B12;color:#E4EBDC;border-r
 <body>
 <div id="app"></div>
 <script>
-var APP_VERSION = 'v36'; // à monter en même temps que le cache de sw.js
+var APP_VERSION = 'v37'; // à monter en même temps que le cache de sw.js
 var STORE_KEY = 'agrigarden-caisse'; // propre à chaque caisse (même compte GitHub = même mémoire navigateur)
 (function () {
 'use strict';
@@ -370,6 +375,10 @@ function deliveryProduct() {
 var RACCOURCI_ID = 'a1'; // Croix en bois
 /* Remises (sur une ligne ou sur le ticket) : désactivées sur les tablettes (seul le patron fait des remises). true = réactiver. */
 var REMISES = false;
+/* Remise ticket par le menu ⋮, protégée par un code patron à 4 chiffres. Seule l'empreinte SHA-256 de
+   'agri-garden-remise:<code>' est dans le code (jamais le code en clair). Pour changer le code : recalculer l'empreinte. */
+var REMISE_CODE_SHA = 'aa7a6ea62f12626a9b719ed5c740e1ac3de0c5e04968ef4f213c5c1c88b9c0fb';
+function sha256Hex(t) { return crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)).then(function (b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }); }
 /* Livraison : nom, adresse et téléphone obligatoires (ticket vendeur à attacher au sapin).
    Facture : société, adresse, TVA, e-mail ; payée au stand ou non (vente « à facturer », sans encaissement). */
 function livValid(x) { return !!(x && (x.nom || '').trim() && (x.adresse || '').trim() && (x.telephone || '').replace(/\D/g, '').length >= 8); }
@@ -1719,6 +1728,27 @@ var A = {
   },
   openFree: function () { S.modal = 'free'; S.freeLabel = ''; S.freePrice = ''; },
   openFreeMenu: function () { S.menu = false; A.openFree(); },
+  /* Remise ticket : code patron, puis la fenêtre de remise habituelle */
+  discAsk: function () { if (!S.cart.length) return; S.menu = false; S.modal = 'code'; S.codeVal = ''; S.codeMsg = null; },
+  codeKey: function (k) {
+    if (S.codeBusy) return;
+    if (S.codeLock && Date.now() < S.codeLock) { S.codeMsg = 'Trop d\u2019essais : réessayez dans ' + Math.ceil((S.codeLock - Date.now()) / 1000) + ' s.'; return; }
+    if (k === 'del') { S.codeVal = (S.codeVal || '').slice(0, -1); S.codeMsg = null; return; }
+    if ((S.codeVal || '').length >= 4) return;
+    S.codeVal = (S.codeVal || '') + k; S.codeMsg = null;
+    if (S.codeVal.length < 4) return;
+    S.codeBusy = true;
+    sha256Hex('agri-garden-remise:' + S.codeVal).then(function (h) {
+      S.codeBusy = false;
+      if (h === REMISE_CODE_SHA) { S.codeTries = 0; S.codeVal = ''; A.ticketDisc(); }
+      else {
+        S.codeTries = (S.codeTries || 0) + 1; S.codeVal = '';
+        if (S.codeTries >= 5) { S.codeTries = 0; S.codeLock = Date.now() + 60000; S.codeMsg = 'Code incorrect. Trop d\u2019essais : réessayez dans 60 s.'; }
+        else S.codeMsg = 'Code incorrect.';
+      }
+      render();
+    });
+  },
   addFree: function () { S.cart.push({ produitId: null, categorie: 'Article libre', name: S.freeLabel.trim(), price: num(S.freePrice), qty: 1, disc: null }); S.modal = null; },
   lineDisc: function (i) { var l = S.cart[+i]; S.modal = 'disc'; S.discTarget = +i; S.discType = l.disc ? l.disc.type : '%'; S.discVal = l.disc ? String(l.disc.val).replace('.', ',') : ''; },
   ticketDisc: function () { S.modal = 'disc'; S.discTarget = 'ticket'; S.discType = S.ticketDisc ? S.ticketDisc.type : '%'; S.discVal = S.ticketDisc ? String(S.ticketDisc.val).replace('.', ',') : ''; },
@@ -2099,6 +2129,7 @@ function vHist() {
 }
 
 var MI = {
+  percent: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg>',
   tag: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
   down: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   cal: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
@@ -2210,7 +2241,7 @@ function vMenu() {
   }
   var cs = cxSummary();
   /* Ordre voulu (3 par ligne sur tablette) : Envoyer maintenant, Caisse du jour, Ventes des jours précédents /
-     Vérifier le catalogue, Stock du stand, Réception de stock / Article libre (+ Ouvrir le tiroir si imprimante) */
+     Vérifier le catalogue, Stock du stand, Réception de stock / Article libre, Remise ticket (+ Ouvrir le tiroir si imprimante) */
   var tiles =
     (ghConfigured() ? (ghReady() ? tile('ghSend', MI.up, S.ghBusy ? 'Envoi en cours…' : 'Envoyer maintenant', 'Sur GitHub · ' + (autoStatus() || {}).court, S.ghBusy ? ' disabled' : '')
       : tile('openGh', MI.up, 'Envoyer maintenant', 'Verrouillé : toucher pour déverrouiller')) : '') +
@@ -2220,6 +2251,7 @@ function vMenu() {
     (ghConfigured() ? tile('stkShow', MI.chart, 'Stock du stand', STKC.at && STKC.place === S.placeId ? 'Calculé le ' + frDate(STKC.at).slice(0, 5) + ' à ' + STKC.at.slice(11, 16) : 'Restant par article') : '') +
     (ghConfigured() ? tile('rcOpen', MI.box, 'Réception de stock', STK.queue.length ? STK.queue.length + ' en attente d\u2019envoi' : 'Articles venus d\u2019un autre stand') : '') +
     tile('openFreeMenu', MI.tag, 'Article libre', 'Hors catalogue : libellé et prix') +
+    tile('discAsk', MI.percent, 'Remise ticket', !S.cart.length ? 'Panier vide' : S.ticketDisc ? 'Remise : ' + discText(S.ticketDisc) : 'Code patron demandé', S.cart.length ? '' : ' disabled') +
     (prConfigured() ? tile('drawerAsk', MI.drawer, 'Ouvrir le tiroir', 'Sans vente (motif demandé)') : '');
   return '<div class="menu-back" data-a="toggleMenu"></div><div class="menu tiles" role="menu">' +
     '<div class="mgrid m3">' + tiles + '</div>' +
@@ -2364,6 +2396,15 @@ function vFree() {
     '<div class="actions"><button class="btn" data-a="close">Annuler</button><button class="btn btn-primary" data-a="addFree"' + (S.freeLabel.trim() && num(S.freePrice) > 0 ? '' : ' disabled') + '>Ajouter</button></div></div></div>';
 }
 
+function vCode() {
+  var n = (S.codeVal || '').length, keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
+  return '<div class="overlay"><div class="modal" style="width:min(400px,96vw)"><h2>Remise ticket</h2>' +
+    '<div class="sub">Code patron (4 chiffres)</div>' +
+    '<div class="codedots">' + [0, 1, 2, 3].map(function (i) { return '<span class="' + (i < n ? 'on' : '') + '"></span>'; }).join('') + '</div>' +
+    (S.codeMsg ? '<div class="result ko" style="display:block;font-size:16px;text-align:center">' + esc(S.codeMsg) + '</div>' : '') +
+    '<div class="codepad">' + keys.map(function (k) { return k === '' ? '<span></span>' : '<button class="btn" data-a="codeKey" data-v="' + k + '">' + (k === 'del' ? '\u232B' : k) + '</button>'; }).join('') + '</div>' +
+    '<div class="actions"><button class="btn" data-a="close">Annuler</button></div></div></div>';
+}
 function vDisc() {
   var base, title, sub;
   if (S.discTarget === 'ticket') { base = up5(subtotal()); title = 'Remise sur le ticket'; sub = 'Sous-total : ' + money(base); }
@@ -2460,6 +2501,7 @@ function render() {
   else if (S.modal === 'liv') html += vLiv();
   else if (S.modal === 'fac') html += vFac();
   else if (S.modal === 'disc') html += vDisc();
+  else if (S.modal === 'code') html += vCode();
   else if (S.modal === 'pay') html += vPay();
   else if (S.modal === 'days') html += vDays();
   else if (S.modal === 'storage') html += vStorage();

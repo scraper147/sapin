@@ -120,7 +120,7 @@ Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctio
 
 ## Menu ⋮
 
-Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Article libre**, **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
+Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Article libre**, **Remise ticket** (code patron), **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
 
 ## Caisse du jour : fond de caisse, retraits, comptage
 
@@ -168,6 +168,8 @@ Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) 
 
 `var REMISES = false;` en haut du script : plus de bouton « Remise ticket », ni de remise sur une ligne (seul le patron fait des remises). Remettre `true` pour les réactiver.
 
+**v37 : ⋮ → Remise ticket** (tuile grisée si le panier est vide) : clavier à 4 chiffres, **code patron**. Code juste → la fenêtre « Remise sur le ticket » habituelle (en % ou en €, Appliquer / Retirer la remise). 5 codes faux → blocage 60 s. Seule l'empreinte SHA-256 de `agri-garden-remise:<code>` est dans le code (`REMISE_CODE_SHA`) ; pour changer le code, recalculer l'empreinte (ex. `python3 -c "import hashlib;print(hashlib.sha256(b'agri-garden-remise:NOUVEAU').hexdigest())"`). Limite : 4 chiffres = 10 000 possibilités, et le dépôt est public ; c'est une barrière pour le personnel, pas une vraie sécurité. Pas de remise sur une ligne.
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -187,7 +189,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v36';` → `'v37'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v37';` → `'v38'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
