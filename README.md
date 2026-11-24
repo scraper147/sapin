@@ -149,6 +149,25 @@ Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) 
 - Dans la vente et le fichier du jour, c'est une ligne normale (produitId de l'article, quantité 1) : elle figure sur le ticket et dans les totaux.
 - **Livraison demandée après l'encaissement** (le client a déjà payé, puis le sapin ne rentre pas dans sa voiture) : onglet **Historique** → bouton **Livraison** sur la vente → l'écran d'encaissement s'ouvre pour le prix de la livraison (titre « Livraison · vente n° 0042 (14:32) »), avec les mêmes modes de paiement et le tiroir. La livraison **s'ajoute à la vente d'origine** : nouvelle ligne, total augmenté, paiement complété (par exemple Cash 50 € + Bancontact 5 € → « Mixte »), mention `livraisonAjoutee` {horodatage, montant, paiement}. Elle compte dans le jour de la vente d'origine (ce jour est renvoyé sur GitHub automatiquement, ou à re-télécharger). Fenêtre « Livraison ajoutée » avec le montant à rendre, puis « Imprimer le ticket ? » : ticket complet de la vente avec « Livraison ajoutée le jj/mm à hh:mm ». Dans l'Historique : « Livraison ajoutée à 11:14 · 5,00 € par Bancontact ». Le bouton disparaît dès que la vente contient une livraison. Une vente en cours dans le panier est mise de côté puis remise.
 
+## Coordonnées de livraison et ticket vendeur (v36)
+
+- Le bouton **Livraison** du panier ouvre d'abord la fenêtre **Livraison** : **nom, adresse, téléphone**, tous obligatoires (au moins 8 chiffres pour le téléphone). « Ajouter la livraison » ajoute la ligne. Une fois ajoutée, le bouton devient **Livraison ✓** (vert plein) : le toucher permet de corriger les coordonnées. Retirer la ligne (−) efface aussi les coordonnées.
+- À la validation, si une imprimante est configurée, le **ticket vendeur** sort **toujours, automatiquement** (choix de Loïc) : « LIVRAISON », n° de vente, date, point de vente, nom, adresse, téléphone en grand, articles (quantités, sans prix, sans la ligne Livraison), « Payé » ou « A FACTURER - NON PAYÉ », société à facturer. Puis la question habituelle « Imprimer le ticket client ? ». Les impressions passent par une file (`PRQ`) : les deux tickets ne se chevauchent pas.
+- **Livraison après coup** (Historique) : la fenêtre Livraison s'ouvre d'abord (« Continuer vers l'encaissement »), puis l'encaissement ; le ticket vendeur sort après la validation.
+- Historique : bouton **Ticket livraison** sur les ventes avec livraison (« Infos livraison » sans imprimante) : corriger les coordonnées et réimprimer le ticket vendeur.
+- Fichier du jour : champ `livraison: { nom, adresse, telephone }` sur la vente.
+
+## À facturer (v36)
+
+- Bouton **À facturer** dans le panier, à côté de Livraison : **nom de la société, adresse, n° de TVA, e-mail** (obligatoires) et **Payé maintenant / Non payé (à facturer)** (obligatoire). Bouton **Facture ✓** ou **Facture · non payé** ensuite (toucher pour corriger, **Retirer** pour annuler).
+- **Non payé** : l'encaissement n'affiche que « À facturer · non payé », rien à encaisser, tiroir fermé ; `paiement: { mode: "a-facturer", cash: 0, bancontact: 0 }`. Le montant n'entre ni dans le cash ni dans le Bancontact (ni dans l'attendu de la Caisse du jour) ; fichier du jour : `totalNonPaye`, `nombreAFacturer`. Tickets : « A FACTURER - NON PAYÉ ».
+- Historique : **À facturer** / **Facture ✓** sur chaque vente pour encoder ou corriger les données après coup (vente déjà payée → `payee: true`). Vente non payée : bouton **Encaisser** (cash, Bancontact, mixte) si le client paie finalement au stand : `paiement` complété, `facture.payee: true`, `facture.paiement: { horodatage, mode, cash, bancontact }` ; le cash compte dans la caisse du jour du paiement.
+- Fichier du jour : `facture: { societe, adresse, tva, email, payee, horodatage, modifieeLe?, paiement? }` sur la vente.
+
+## Remises désactivées (v36)
+
+`var REMISES = false;` en haut du script : plus de bouton « Remise ticket », ni de remise sur une ligne (seul le patron fait des remises). Remettre `true` pour les réactiver.
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -168,7 +187,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v35';` → `'v36'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v36';` → `'v37'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
