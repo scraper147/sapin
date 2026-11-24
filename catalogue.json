@@ -1,8 +1,8 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 11,
-  "date": "2026-11-20",
+  "version": 12,
+  "date": "2026-11-24",
   "pointsDeVente": [
     {
       "id": "pdv1",
@@ -84,6 +84,20 @@
           "libelle": "300-400 cm",
           "prix": 120,
           "ordre": 7,
+          "actif": true
+        },
+        {
+          "id": "nord-4",
+          "libelle": "400-500 cm",
+          "prix": 150,
+          "ordre": 8,
+          "actif": true
+        },
+        {
+          "id": "nord-5",
+          "libelle": "500-600 cm",
+          "prix": 230,
+          "ordre": 9,
           "actif": true
         }
       ]
