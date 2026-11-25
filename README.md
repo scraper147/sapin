@@ -170,6 +170,19 @@ Bouton **Livraison** (vrai bouton à bord plein, icône camionnette, sans prix) 
 
 **v37 : ⋮ → Remise ticket** (tuile grisée si le panier est vide) : clavier à 4 chiffres, **code patron**. Code juste → la fenêtre « Remise sur le ticket » habituelle (en % ou en €, Appliquer / Retirer la remise). 5 codes faux → blocage 60 s. Seule l'empreinte SHA-256 de `agri-garden-remise:<code>` est dans le code (`REMISE_CODE_SHA`) ; pour changer le code, recalculer l'empreinte (ex. `python3 -c "import hashlib;print(hashlib.sha256(b'agri-garden-remise:NOUVEAU').hexdigest())"`). Limite : 4 chiffres = 10 000 possibilités, et le dépôt est public ; c'est une barrière pour le personnel, pas une vraie sécurité. Pas de remise sur une ligne.
 
+## Commandes à retirer au stand (v38)
+
+Onglet **Commandes** en haut, à côté de Caisse et Historique (badge rouge = commandes à retirer aujourd'hui ou en retard ; visible si l'envoi GitHub est configuré).
+
+- **Lecture** de `sapin/commandes/<AAAA>.json` (écrit par l'App admin, format `agri-garden-caisse/commandes`, `commandes` indexé par id ; année précédente aussi en janvier) : à l'ouverture de l'onglet, au démarrage et à chaque passage de l'envoi automatique (20 s mini). Copie locale (clé `agrigarden-caisse-commandes`) réduite aux commandes **retrait** de ce stand, pour l'affichage hors ligne.
+- **Affichées** : `mode "retrait"`, `retrait.stand.id` = point de vente de la tablette, statut ≠ `annulee`. Onglets **À retirer** (`a-preparer`, `prete`, triées par date ; cadre vert = aujourd'hui, rouge = en retard) et **Retirées** (`livree`). Recherche par nom ou n°. Carte : n° (« … » s'il manque), nom, téléphone, date, articles, total, déjà payé (mode), reste à payer, remarque, statut.
+- **Encaisser** : montant = reste à payer (total − `paye.montant`), cash / Bancontact / mixte comme une vente (tiroir, rendu, ticket) ; le panier en cours n'est pas touché, les lignes et prix viennent de la commande. Reste 0 → **Remettre au client** (sans paiement, `paiement.mode "deja-paye"`).
+- **Vente** enregistrée dans le fichier du jour avec `commande: { id, numero, dejaPaye, modeDejaPaye }` ; `total` = total de la commande, `paiement` = ce qui est encaissé maintenant. Fichier du jour : `totalPayeALaCommande`. **Pas déduite du stock** (le stock a été retiré par la commande) ; les dossiers `commandes/`, `caisse/`, `factures/` ne sont pas lus pour le stock.
+- **Mise à jour de la commande** (file d'attente, envoi avec l'envoi automatique) : relecture + PUT avec le sha lu, 3 essais sur 409/422 ; seulement cette commande : `statut "livree"`, `paye { montant: dejaPaye + encaissé, mode }`, `encaissement { venteId, horodatage, montant, paiement, pointDeVente, appareil }`, ligne `historique` (`source "caisse"`), `modifieLe` ; `majLe`, `majPar "caisse"`. Commande annulée/supprimée dans l'Admin ou déjà encaissée par une autre vente → pas d'écriture, vente gardée, message « prévenir le responsable ». En attente : « Retirée (envoi en attente) ». Un deuxième encaissement est impossible.
+- **Annulation** de la vente (Historique) → la commande redevient à retirer : `encaissement` retiré, `statut "prete"`, `paye.montant = dejaPaye` (mode d'avant), ligne `historique`. Si la mise à jour n'était pas encore partie, elle est simplement retirée de la file.
+- Ticket : « Commande n° X », « Déjà payé à la commande », « Encaissé maintenant ». Rapport de caisse : « dont payé à la commande » + liste des commandes retirées.
+- Smartphone : point de vente et états ☁ 🖨 dans la barre du haut, les trois onglets sur la deuxième ligne.
+
 ## Annuler une vente
 
 Onglet **Historique** : choisir le jour (aujourd'hui ou l'un des 6 jours précédents), puis **Annuler** sur la vente concernée, avec un motif facultatif.
@@ -189,7 +202,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v37';` → `'v38'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v38';` → `'v39'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
