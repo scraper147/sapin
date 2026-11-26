@@ -1,8 +1,8 @@
 {
  "format": "agri-garden-caisse/ticket",
  "formatVersion": 1,
- "version": 7,
- "majLe": "2026-11-26T06:50:02.136Z",
+ "version": 8,
+ "majLe": "2026-11-26T06:50:04.366Z",
  "majPar": "admin",
  "ticket": {
   "logoTaille": "moyen",
@@ -28,7 +28,7 @@
    "paiement": true,
    "rendu": true
   },
-  "separateur": ".",
+  "separateur": "-",
   "tauxTVA": 0,
   "merci": "Merci et joyeuses fêtes !",
   "saison": "",
