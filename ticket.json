@@ -1,8 +1,8 @@
 {
  "format": "agri-garden-caisse/ticket",
  "formatVersion": 1,
- "version": 12,
- "majLe": "2026-11-26T16:27:46.302Z",
+ "version": 13,
+ "majLe": "2026-11-26T16:28:15.993Z",
  "majPar": "admin",
  "ticket": {
   "logoTaille": "moyen",
@@ -29,7 +29,7 @@
    "rendu": true
   },
   "separateur": "-",
-  "tauxTVA": 0,
+  "tauxTVA": 6,
   "merci": "Merci et joyeuses fêtes !",
   "saison": "Echanger ce ticket contre un vin chaud lors de la Guinguette de Noël à Spy les 10,11,12 et 13 décembre à la pépinière de Spy.",
   "saisonDu": "26/11",
