@@ -1,8 +1,8 @@
 {
  "format": "agri-garden-caisse/ticket",
  "formatVersion": 1,
- "version": 2,
- "majLe": "2026-11-26T06:49:36.776Z",
+ "version": 3,
+ "majLe": "2026-11-26T06:49:51.026Z",
  "majPar": "admin",
  "ticket": {
   "logoTaille": "moyen",
@@ -19,7 +19,7 @@
   "email": "vaerman_xavier@hotmail.com",
   "tva": "BE 0782.523.348",
   "site": "",
-  "messageEntete": "",
+  "messageEntete": "Bien ven",
   "afficher": {
    "numero": true,
    "date": true,
