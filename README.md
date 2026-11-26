@@ -67,7 +67,7 @@ Une fois configurée :
   - toucher le bandeau ou la mention ouvre la fenêtre GitHub.
 - **Envoyer à la main** : **⋮ → Envoyer maintenant** (ventes du jour, la tuile rappelle l'état de l'envoi), ou **Envoyer sur GitHub / Renvoyer sur GitHub** dans « Ventes des jours précédents » (à côté de **Télécharger** ; si la tablette est verrouillée, la phrase est demandée puis le jour est envoyé).
 - **Jeton refusé** (expiré ou révoqué) : la tablette oublie le jeton, le bandeau devient rouge. Installer une nouvelle version de la caisse avec la nouvelle clé, puis déverrouiller à nouveau.
-- Fichier : `<GH_DOSSIER>/AAAA-MM-JJ_<point de vente>_<nom>_<appareil>.json` (même contenu que l'export) ; l'identifiant de l'appareil évite que deux tablettes du même point de vente s'écrasent ; chaque envoi remplace le fichier de cette tablette pour ce jour. Si le point de vente de la tablette change, l'ancien fichier du jour est supprimé.
+- Fichier : `<GH_DOSSIER>/ventes/AAAA-MM-JJ_<point de vente>_<nom>_<appareil>.json` (même contenu que l'export ; sous-dossier `ventes/` depuis la v42, avant à la racine de `<GH_DOSSIER>/` : à la mise à jour, chaque jour encore sur la tablette et déjà envoyé est renvoyé dans `ventes/` et l'ancien fichier supprimé ; les jours plus anciens restent à l'ancien emplacement, l'App admin lit les deux) ; l'identifiant de l'appareil évite que deux tablettes du même point de vente s'écrasent ; chaque envoi remplace le fichier de cette tablette pour ce jour. Si le point de vente de la tablette change, l'ancien fichier du jour est supprimé.
 - Un jour envoyé compte comme exporté : il peut ensuite être effacé de la tablette.
 
 ## Raccourci et article libre
@@ -209,7 +209,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v41';` → `'v42'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v42';` → `'v43'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
