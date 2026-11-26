@@ -1,0 +1,43 @@
+{
+ "format": "agri-garden-caisse/ticket",
+ "formatVersion": 1,
+ "version": 1,
+ "majLe": "2026-11-26T06:49:34.496Z",
+ "majPar": "admin",
+ "ticket": {
+  "logoTaille": "moyen",
+  "logo": "",
+  "nom": "Agri-Garden",
+  "nomGrand": true,
+  "entete": "centre",
+  "activite": "Vente de sapins de Noël",
+  "adresse": [
+   "Rue de Soye, 6",
+   "5190 Spy"
+  ],
+  "telephone": "0494 36 36 74",
+  "email": "vaerman_xavier@hotmail.com",
+  "tva": "BE 0782.523.348",
+  "site": "",
+  "messageEntete": "",
+  "afficher": {
+   "numero": true,
+   "date": true,
+   "pdv": true,
+   "nbArticles": true,
+   "paiement": true,
+   "rendu": true
+  },
+  "separateur": "-",
+  "tauxTVA": 0,
+  "merci": "Merci et joyeuses fêtes !",
+  "saison": "",
+  "saisonDu": "",
+  "saisonAu": "",
+  "message": "",
+  "qrLien": "",
+  "qrTexte": "",
+  "mention": "Ce ticket n’est pas une facture.",
+  "papier": "80"
+ }
+}
