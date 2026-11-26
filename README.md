@@ -95,7 +95,14 @@ Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctio
 - **Une vente n'est jamais bloquée par l'imprimante** : si le ticket ne sort pas, la vente reste enregistrée, la fenêtre « Ticket non imprimé » propose **Réessayer** (ou réimprimer plus tard depuis l'Historique). Si le tiroir ne s'ouvre pas : utiliser la clé.
 - **Journal du tiroir** : chaque ouverture est enregistrée avec l'heure et le motif (« Vente » + numéro de vente, « Encaissement abandonné », « Test du tiroir », ou le motif choisi). Il est inclus dans le fichier du jour (`ouverturesTiroir`, `nombreOuverturesSansVente`) et envoyé sur GitHub avec les ventes.
 - **Ticket** (proposition 1, à valider avec le gérant) : logo Agri-Garden en noir et blanc, activité, adresse (Rue de Soye, 6 – 5190 Spy) / téléphone / e-mail / TVA BE 0782.523.348 (bloc `TICKET` en haut du module « Ticket » dans `index.html` ; un champ vide n'est pas imprimé), n° de ticket, date, point de vente, articles (quantité × prix, remises ; la livraison toujours en dernier, séparée des articles par 10 tirets), TOTAL en grand, nombre d'articles, paiement (cash reçu / rendu), « Merci et joyeuses fêtes ! », « Ce ticket n'est pas une facture. ». 48 caractères par ligne, montants sans symbole (« EUR » au total).
-- **Aperçu du ticket** (retiré du menu ⋮ en v34, code conservé : `A.tkPrev`) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
+- **⋮ → Aperçu du ticket** (retiré en v34, remis en v39) : choisir un jour et une vente pour voir le ticket tel qu'il sera imprimé, en version Ticket ou Duplicata ; sans vente, une vente d'exemple est utilisée. Les champs vides y apparaissent comme « [… à compléter] ». Avec imprimante : bouton **Imprimer** (duplicata).
+
+**Contenu du ticket (v40) : se règle dans l'App admin › Gestion sapin › Ticket.** L'Admin publie `ticket.json` (format `agri-garden-caisse/ticket`) à côté de `catalogue.json` ; **il ne fait jamais partie du paquet de la caisse**. La caisse le lit au démarrage, au retour du réseau, à ⋮ › Vérifier le catalogue et toutes les 30 s au premier plan ; une nouvelle version est installée sans demander (toast « Ticket mis à jour ») et gardée sur la tablette (clé `agrigarden-caisse-ticket`) pour imprimer hors ligne. Fichier absent (404), illisible ou d'un autre format → retour au ticket intégré (bloc `TICKET`, identique à la v39). Chaque champ manquant ou invalide garde sa valeur par défaut.
+- Réglages : logo (aucun / petit 256 / moyen 384 / grand 512 points, image personnalisée ou logo intégré), nom (en grand sans logo, ou sous le logo), alignement de l'en-tête, coordonnées, message d'en-tête, lignes affichées (n°, date, point de vente, nombre d'articles, paiement, reçu / rendu), séparateur, TVA (« dont TVA x % »), message saisonnier (entre deux dates JJ/MM), merci, message, QR code + texte, mention, papier 80 mm (48 caractères) ou 58 mm (32 caractères, QR largeur 4).
+- Toujours imprimés : DUPLICATA, articles (livraison en dernier), TOTAL, commande / déjà payé / encaissé, livraison ajoutée, à facturer, vente annulée, « Duplicata imprimé le ».
+- Ordre en bas : message saisonnier, merci, message, QR code, texte du QR, mention.
+- Ticket vendeur LIVRAISON : seulement le papier et le séparateur. Rapport de caisse : seulement le papier.
+- Aperçu du ticket : même XML ; il indique la version du ticket installé. QR dessiné avec qrcode-generator 1.4.4 (MIT, inclus).
 
 ## Stock du stand (consultation)
 
@@ -120,7 +127,7 @@ Sans adresse d'imprimante (après « Retirer l'imprimante »), la caisse fonctio
 
 ## Menu ⋮
 
-Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Article libre**, **Remise ticket** (code patron), **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
+Tuiles, 3 par ligne sur tablette (2 sur smartphone, dans le même ordre) : **Envoyer maintenant** (si l'envoi est verrouillé : « toucher pour déverrouiller »), **Caisse du jour**, **Ventes des jours précédents** / **Vérifier le catalogue**, **Stock du stand**, **Réception de stock** / **Article libre**, **Remise ticket** (code patron), **Aperçu du ticket** / **Ouvrir le tiroir** (si une imprimante est configurée). Puis **Retour à l'accueil** (paramètres de la tablette). La tuile « Exporter les ventes du jour » a été retirée (v29) : le fichier du jour se télécharge dans Ventes des jours précédents.
 
 ## Caisse du jour : fond de caisse, retraits, comptage
 
@@ -202,7 +209,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v38';` → `'v39'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v40';` → `'v41'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
