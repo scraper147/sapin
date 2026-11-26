@@ -1,8 +1,8 @@
 {
  "format": "agri-garden-caisse/ticket",
  "formatVersion": 1,
- "version": 10,
- "majLe": "2026-11-26T06:50:59.827Z",
+ "version": 11,
+ "majLe": "2026-11-26T06:56:59.160Z",
  "majPar": "admin",
  "ticket": {
   "logoTaille": "moyen",
@@ -35,8 +35,8 @@
   "saisonDu": "",
   "saisonAu": "",
   "message": "",
-  "qrLien": "https://scraper147.github.io/sapin/",
-  "qrTexte": "N'hésitez pas à vous inscrire à notre newsletter",
+  "qrLien": "",
+  "qrTexte": "",
   "mention": "Ce ticket n’est pas une facture.",
   "papier": "80"
  }
