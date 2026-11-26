@@ -1,8 +1,8 @@
 {
   "format": "agri-garden-caisse/catalogue",
   "formatVersion": 1,
-  "version": 14,
-  "date": "2026-11-24",
+  "version": 15,
+  "date": "2026-11-26",
   "pointsDeVente": [
     {
       "id": "pdv1",
@@ -207,6 +207,28 @@
         }
       ],
       "prefixe": false
+    },
+    {
+      "id": "cat4",
+      "nom": "Horeca",
+      "ordre": 7,
+      "actif": true,
+      "produits": [
+        {
+          "id": "cat4-1",
+          "libelle": "Vin Chaud ",
+          "prix": 2.5,
+          "ordre": 1,
+          "actif": true
+        },
+        {
+          "id": "cat4-2",
+          "libelle": "Bière ",
+          "prix": 3,
+          "ordre": 2,
+          "actif": true
+        }
+      ]
     }
   ]
 }
