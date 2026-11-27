@@ -195,7 +195,7 @@ Onglet **Commandes** en haut, à côté de Caisse et Historique (badge rouge = c
 L'Admin publie `offres.json` (format `agri-garden-caisse/offres`) à côté de `catalogue.json` et `ticket.json` ; **jamais dans le paquet de la caisse**. Lu au démarrage, au retour du réseau, à ⋮ › Vérifier le catalogue et toutes les 30 s au premier plan ; nouvelle version installée sans demander, copie `agrigarden-caisse-offres` pour le hors ligne ; 404 ou format inconnu → aucune offre.
 
 - Une offre s'applique si `actif`, stand de la tablette = `pdv.id`, date du jour entre `du` et `au` (vides = sans limite) et qu'il reste des pièces.
-- **Panier** : dès que l'article `produitId` y est (tuile ou raccourci), une **ligne offerte** apparaît automatiquement à 0 € (quantité = min(articles, `maxParVente`, reste)) ; les autres pièces restent au prix normal (3 croix → 1 offerte + 2 payées). Non modifiable : on retire en diminuant la quantité. Bandeau « Offre : N offertes restantes » / « Offre terminée » en haut du panier, mention sur la tuile et sur le raccourci. Pas d'offre pour l'encaissement d'une commande, ni pour une livraison ajoutée après coup.
+- **Panier** : dès que l'article `produitId` y est (tuile ou raccourci), une **ligne offerte** apparaît automatiquement à 0 € (quantité = min(articles, `maxParVente`, reste)) ; les autres pièces restent au prix normal (3 croix → 1 offerte + 2 payées). Non modifiable : on retire en diminuant la quantité. Bandeau « Offre : N offertes restantes » / « Offre terminée » en haut du panier, mention « N à offrir » sur la tuile et « offerte » sur le raccourci. Pas d'offre pour l'encaissement d'une commande, ni pour une livraison ajoutée après coup.
 - **Vente** : ligne `{ produitId, libelle: <libellé de l'offre>, prixUnitaire: 0, quantite, total: 0, offre: { id, libelle, prixNormal } }` ; comptée dans le nombre d'articles et **déduite du stock** (même produitId).
 - **Reste** = `quantite` − pièces offertes dans les ventes non annulées du stand (ventes de la tablette + fichiers du dépôt déjà résumés pour le stock du stand, le plus récent par jour). Mis à jour dès la validation ou l'annulation, même hors ligne. Toast « Offre terminée : N articles offerts » à la vente qui la termine.
 - **Ticket** : « <libellé> 0,00 » puis « Offert (valeur X EUR) » en petite police ; ticket vendeur livraison : « (offerte) ».
@@ -219,7 +219,7 @@ Les ventes, l'export et le catalogue fonctionnent de la même façon sur les deu
 
 Remplacez les fichiers sur GitHub (**Add file → Upload files**, puis **Commit**) : `index.html`, `sw.js`, `README.md` (et `manifest.webmanifest` / `icons` s'ils ont changé). **Jamais `catalogue.json`** : il appartient à l'app Admin.
 Les tablettes prennent la nouvelle version la prochaine fois qu'elles ouvrent l'app avec du réseau.
-**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v45';` → `'v46'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
+**À chaque nouvelle version, augmentez le numéro de cache dans `sw.js`** (actuellement `var CACHE = PREFIX + 'v46';` → `'v47'`…), ainsi que `APP_VERSION` en haut de `index.html` (affichée sur l'accueil), sans changer le préfixe.
 
 ## Bonnes pratiques
 
