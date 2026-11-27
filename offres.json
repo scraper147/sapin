@@ -1,0 +1,25 @@
+{
+ "format": "agri-garden-caisse/offres",
+ "formatVersion": 1,
+ "version": 1,
+ "majLe": "2026-11-27T07:54:29.417Z",
+ "majPar": "admin",
+ "offres": [
+  {
+   "id": "offre-boninne-croix-en-bois-tgib",
+   "libelle": "Croix en bois offerte (offre de lancement)",
+   "produitId": "a1",
+   "pdv": {
+    "id": "pdv4",
+    "nom": "Boninne"
+   },
+   "quantite": 50,
+   "maxParVente": 1,
+   "du": "",
+   "au": "",
+   "actif": true,
+   "prixNormal": 5,
+   "creeLe": "2026-11-27T07:54:29.051Z"
+  }
+ ]
+}
